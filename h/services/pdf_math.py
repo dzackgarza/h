@@ -128,25 +128,34 @@ def _trim_to_quote(ocr: str, exact: str) -> str:
 
 
 def _ocr_latex(png: bytes) -> str:
-    """Mathpix OCR of a PNG -> its text with math rendered as ``$…$`` LaTeX."""
+    """Mathpix OCR of a PNG -> its text with math rendered as ``$…$`` LaTeX.
+
+    Every failure of the OCR round-trip -- a missing key, a network error, a non-2xx
+    response, or a timeout -- is a ``MathRecoveryError`` (never a leaked ``requests`` /
+    config error), so the caller rolls the create back and the outcome logs uniformly.
+    """
     key = os.environ.get("MATHPIX_API_KEY")
     if not key:
         msg = "MATHPIX_API_KEY not set; cannot OCR PDF math"
-        raise RuntimeError(msg)
-    resp = requests.post(
-        "https://api.mathpix.com/v3/text",
-        headers={"app_key": key},
-        json={
-            "src": "data:image/png;base64," + base64.b64encode(png).decode(),
-            "formats": ["text"],
-            # Hypothesis's markdown renders math only in \(..\) (inline) or $$..$$ (block)
-            # delimiters, never single $..$ -- so emit those, which agents read too.
-            "math_inline_delimiters": ["\\(", "\\)"],
-            "math_display_delimiters": ["$$", "$$"],
-        },
-        timeout=recovery_timeout(),
-    )
-    resp.raise_for_status()
+        raise MathRecoveryError(msg)
+    try:
+        resp = requests.post(
+            "https://api.mathpix.com/v3/text",
+            headers={"app_key": key},
+            json={
+                "src": "data:image/png;base64," + base64.b64encode(png).decode(),
+                "formats": ["text"],
+                # Hypothesis's markdown renders math only in \(..\) (inline) or $$..$$
+                # (block) delimiters, never single $..$ -- so emit those, which agents read.
+                "math_inline_delimiters": ["\\(", "\\)"],
+                "math_display_delimiters": ["$$", "$$"],
+            },
+            timeout=recovery_timeout(),
+        )
+        resp.raise_for_status()
+    except requests.RequestException as exc:
+        msg = f"Mathpix OCR request failed: {exc}"
+        raise MathRecoveryError(msg) from exc
     return resp.json().get("text", "").strip()
 
 
@@ -160,7 +169,13 @@ def _fetch_pdf(uri: str) -> bytes:
     time.
     """
     if uri not in _pdf_cache:
-        _pdf_cache[uri] = requests.get(uri, timeout=30, allow_redirects=True).content
+        try:
+            resp = requests.get(uri, timeout=recovery_timeout(), allow_redirects=True)
+            resp.raise_for_status()
+        except requests.RequestException as exc:
+            msg = f"could not fetch PDF {uri!r}: {exc}"
+            raise MathRecoveryError(msg) from exc
+        _pdf_cache[uri] = resp.content
     return _pdf_cache[uri]
 
 
@@ -172,7 +187,11 @@ def clean_pdf_quote(uri: str, page_index: int, exact: str) -> str:
     range, the region can't be located, or OCR comes back empty, so a failure surfaces and
     rolls the create back rather than persisting wrong or raw math.
     """
-    doc = fitz.open(stream=_fetch_pdf(uri), filetype="pdf")
+    try:
+        doc = fitz.open(stream=_fetch_pdf(uri), filetype="pdf")
+    except fitz.FileDataError as exc:  # corrupt / non-PDF bytes
+        msg = f"PDF at {uri!r} could not be opened: {exc}"
+        raise MathRecoveryError(msg) from exc
     if not 0 <= page_index < doc.page_count:
         msg = f"PDF page {page_index} is out of range (0..{doc.page_count - 1})"
         raise MathRecoveryError(msg)

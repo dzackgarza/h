@@ -88,6 +88,36 @@ class TestNormalize:
 
         assert self.rows(db_session, annotation) == 0
 
+    def test_a_successful_recovery_logs_the_method_and_latency(
+        self, svc, html_source_extract, factories, caplog
+    ):
+        html_source_extract.return_value = r"the moduli \(\mathcal{M}\) here"
+        annotation = self.annotation(factories, "the moduli M here", "https://ex.com/p")
+
+        with caplog.at_level("INFO", logger="h.services.normalization"):
+            svc.normalize(annotation)
+
+        assert any(
+            "via html" in r.message and "ms" in r.message for r in caplog.records
+        )
+
+    def test_a_failed_recovery_logs_the_reason(
+        self, svc, clean_pdf_quote, factories, caplog
+    ):
+        clean_pdf_quote.side_effect = MathRecoveryError("OCR returned empty output")
+        annotation = self.annotation(
+            factories, "2K ~ 0", "https://ex.com/paper.pdf", page=1
+        )
+
+        with caplog.at_level("WARNING", logger="h.services.normalization"):  # noqa: SIM117
+            with pytest.raises(MathRecoveryError):
+                svc.normalize(annotation)
+
+        assert any(
+            "failed" in r.message and "OCR returned empty output" in r.message
+            for r in caplog.records
+        )
+
     def test_a_quote_less_annotation_gets_no_row(self, svc, factories):
         # A reply carries no selection; there is nothing to recover, so no row (no raise).
         annotation = factories.Annotation(

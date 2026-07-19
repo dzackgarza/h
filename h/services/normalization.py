@@ -15,7 +15,9 @@ which rolls the create back so no annotation -- and no raw quote -- is ever pers
 
 from __future__ import annotations
 
+import logging
 import subprocess
+import time
 from pathlib import Path
 
 from sqlalchemy import orm, select
@@ -23,6 +25,8 @@ from sqlalchemy import orm, select
 from h.models import Annotation, AnnotationNormalized
 from h.models.document import DocumentURI
 from h.services.pdf_math import MathRecoveryError, clean_pdf_quote, recovery_timeout
+
+log = logging.getLogger(__name__)
 
 _HTML_NORMALIZE = (
     Path(__file__).resolve().parents[1] / "scripts" / "html-normalize" / "index.mjs"
@@ -85,8 +89,27 @@ class NormalizationService:
         if not quote:
             return None
 
-        recovered, method = self._recover(annotation, quote)
+        started = time.perf_counter()
+        try:
+            recovered, method = self._recover(annotation, quote)
+        except MathRecoveryError as exc:
+            # The outcome of every recovery is logged for observability; a failure is the
+            # loud half of that (it also rolls the create back, so nothing persists).
+            log.warning(
+                "math normalization failed for annotation %s after %.0fms: %s",
+                annotation.id,
+                (time.perf_counter() - started) * 1000,
+                exc,
+            )
+            raise
 
+        latency_ms = (time.perf_counter() - started) * 1000
+        log.info(
+            "normalized annotation %s via %s in %.0fms",
+            annotation.id,
+            method,
+            latency_ms,
+        )
         row = AnnotationNormalized(
             annotation=annotation, normalized_quote=recovered, method=method
         )

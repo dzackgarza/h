@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import fitz
 import pytest
+import requests
 
 from h.services import pdf_math
 from h.services.pdf_math import MathRecoveryError
@@ -136,3 +137,23 @@ def test_clean_pdf_quote_raises_when_ocr_is_empty(monkeypatch):
     monkeypatch.setattr(pdf_math, "_ocr_latex", lambda _png: "")
     with pytest.raises(MathRecoveryError, match="empty"):
         pdf_math.clean_pdf_quote(uri, 0, "the residue is some finite data attached")
+
+
+def test_ocr_latex_raises_math_recovery_error_when_key_missing(monkeypatch):
+    # A missing key is a recovery failure (rolls the create back), not a leaked config error.
+    monkeypatch.delenv("MATHPIX_API_KEY", raising=False)
+    with pytest.raises(MathRecoveryError, match="MATHPIX_API_KEY"):
+        pdf_math._ocr_latex(b"\x89PNG")  # noqa: SLF001
+
+
+def test_ocr_latex_wraps_mathpix_request_failure(monkeypatch):
+    # A Mathpix network error / timeout / non-2xx must surface as MathRecoveryError, so it
+    # rolls back and logs uniformly rather than leaking a raw requests exception.
+    monkeypatch.setenv("MATHPIX_API_KEY", "test-key")
+
+    def _boom(*_args, **_kwargs):
+        raise requests.ConnectionError("mathpix unreachable")
+
+    monkeypatch.setattr(pdf_math.requests, "post", _boom)
+    with pytest.raises(MathRecoveryError, match="Mathpix OCR request failed"):
+        pdf_math._ocr_latex(b"\x89PNG")  # noqa: SLF001
