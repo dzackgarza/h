@@ -19,6 +19,7 @@ class TestNormalize:
         html_normalize.assert_called_once_with("https://ex.com/p", "the moduli M here")
         assert row.normalized_quote == r"the moduli \(\mathcal{M}\) here"
         assert row.method == "html"
+        assert row.error is None
 
     def test_html_annotation_with_no_recoverable_math_stores_raw(
         self, svc, html_normalize, factories
@@ -42,6 +43,7 @@ class TestNormalize:
         clean_pdf_quote.assert_called_once_with("https://ex.com/paper.pdf", 3, "2K ~ 0")
         assert row.normalized_quote == r"2K \(\sim\) 0"
         assert row.method == "ocr"
+        assert row.error is None
 
     def test_pdf_annotation_with_no_recovery_stores_raw(
         self, svc, clean_pdf_quote, factories
@@ -54,6 +56,22 @@ class TestNormalize:
         row = svc.normalize(annotation)
 
         assert row.method == "raw"
+        assert row.error is None
+
+    def test_a_recovery_failure_is_recorded_not_raised(
+        self, svc, clean_pdf_quote, factories
+    ):
+        # A PDF fetch/OCR error must degrade to a recorded failure, not crash the task.
+        clean_pdf_quote.side_effect = RuntimeError("MATHPIX_API_KEY not set")
+        annotation = self.annotation(
+            factories, "2K ~ 0", "https://ex.com/paper.pdf", page=1
+        )
+
+        row = svc.normalize(annotation)
+
+        assert row.normalized_quote == "2K ~ 0"  # raw capture kept as a floor
+        assert row.method == "raw"
+        assert row.error == "RuntimeError: MATHPIX_API_KEY not set"
 
     def test_an_annotation_with_no_quote_gets_no_row(self, svc, factories):
         annotation = factories.Annotation(

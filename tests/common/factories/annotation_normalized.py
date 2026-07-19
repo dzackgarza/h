@@ -13,3 +13,4 @@ class AnnotationNormalized(ModelFactory):
     annotation = factory.SubFactory(Annotation)
     normalized_quote = factory.Faker("sentence")
     method = "html"
+    error = None

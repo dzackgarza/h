@@ -73,34 +73,44 @@ class NormalizationService:
         recovered = self._recover(annotation)
         if recovered is None:
             return None
-        quote, method = recovered
+        quote, method, error = recovered
 
         row = annotation.normalized or AnnotationNormalized(annotation=annotation)
         row.normalized_quote = quote
         row.method = method
+        row.error = error
         if row not in self._session:
             self._session.add(row)
         return row
 
-    def _recover(self, annotation: Annotation) -> tuple[str, str] | None:
-        """``(normalized_quote, method)`` for an annotation with a quote, else ``None``."""
+    def _recover(self, annotation: Annotation) -> tuple[str, str, str | None] | None:
+        """Recover ``(normalized_quote, method, error)``, or ``None`` for a quote-less one.
+
+        A recovery failure (PDF fetch/OCR, page parse) is caught and returned as the raw quote
+        with an ``error`` message, not raised: one bad document must neither crash the
+        enrichment task nor lose the annotation. The error is recorded on the row and logged
+        by the caller -- observable, never swallowed.
+        """
         quote = annotation.quote or ""
         if not quote:
             return None
         uri = annotation.target_uri or ""
 
         page = _page_index(annotation)
-        if page is not None:  # PDF annotation
-            url = self._resolve_pdf_url(uri)
-            clean = clean_pdf_quote(url, page, quote) if url else quote
-            return (clean, "ocr") if clean != quote else (quote, "raw")
+        try:
+            if page is not None:  # PDF annotation
+                url = self._resolve_pdf_url(uri)
+                clean = clean_pdf_quote(url, page, quote) if url else quote
+                return (clean, "ocr", None) if clean != quote else (quote, "raw", None)
 
-        if uri.startswith(("http://", "https://")):  # HTML annotation
-            clean = _html_normalize(uri, quote)
-            if clean and clean != quote:
-                return (clean, "html")
+            if uri.startswith(("http://", "https://")):  # HTML annotation
+                clean = _html_normalize(uri, quote)
+                if clean and clean != quote:
+                    return (clean, "html", None)
+        except Exception as exc:  # noqa: BLE001 - recorded on the row and logged, never swallowed
+            return (quote, "raw", f"{type(exc).__name__}: {exc}")
 
-        return (quote, "raw")
+        return (quote, "raw", None)
 
     def _resolve_pdf_url(self, uri: str) -> str | None:
         """Resolve a PDF annotation's document to a fetchable http(s) URL, or ``None``.

@@ -1,3 +1,5 @@
+import newrelic
+
 from h.db.types import URLSafeUUID
 from h.models import Annotation
 from h.services.annotation_authority_queue import AnnotationAuthorityQueueService
@@ -63,5 +65,21 @@ def normalize_annotation(annotation_id):
         AnnotationReadService
     ).get_annotation_by_id(annotation_id)
     if annotation is None:
+        log.info("normalize_annotation: annotation %s not found", annotation_id)
         return
-    celery.request.find_service(NormalizationService).normalize(annotation)
+
+    row = celery.request.find_service(NormalizationService).normalize(annotation)
+    if row is None:
+        return  # no quote to normalize; nothing recorded
+
+    if row.error:
+        log.warning("normalize_annotation: %s failed: %s", annotation_id, row.error)
+        newrelic.agent.record_custom_metrics([("Custom/NormalizeAnnotation/failed", 1)])
+    else:
+        if row.method != "raw":
+            log.info(
+                "normalize_annotation: %s recovered via %s", annotation_id, row.method
+            )
+        newrelic.agent.record_custom_metrics(
+            [(f"Custom/NormalizeAnnotation/{row.method}", 1)]
+        )

@@ -65,8 +65,13 @@ class TestPublishAnnotationEventForAuthority:
 
 
 class TestNormalizeAnnotation:
-    def test_it(self, annotation_read_service, normalization_service):
+    def test_it_normalizes_and_records_a_recovery(
+        self, annotation_read_service, normalization_service, log, newrelic
+    ):
         annotation = annotation_read_service.get_annotation_by_id.return_value
+        row = normalization_service.normalize.return_value
+        row.error = None
+        row.method = "html"
 
         normalize_annotation("annotation_id")
 
@@ -74,19 +79,71 @@ class TestNormalizeAnnotation:
             "annotation_id"
         )
         normalization_service.normalize.assert_called_once_with(annotation)
+        log.info.assert_called_once()
+        newrelic.agent.record_custom_metrics.assert_called_once_with(
+            [("Custom/NormalizeAnnotation/html", 1)]
+        )
 
-    def test_it_does_nothing_for_a_missing_annotation(
-        self, annotation_read_service, normalization_service
+    @pytest.mark.usefixtures("annotation_read_service")
+    def test_a_raw_result_records_its_metric_without_an_info_log(
+        self, normalization_service, log, newrelic
+    ):
+        row = normalization_service.normalize.return_value
+        row.error = None
+        row.method = "raw"
+
+        normalize_annotation("annotation_id")
+
+        log.info.assert_not_called()  # raw is the boring default, not worth a line
+        newrelic.agent.record_custom_metrics.assert_called_once_with(
+            [("Custom/NormalizeAnnotation/raw", 1)]
+        )
+
+    @pytest.mark.usefixtures("annotation_read_service")
+    def test_a_failure_is_warned_and_metered(
+        self, normalization_service, log, newrelic
+    ):
+        row = normalization_service.normalize.return_value
+        row.error = "RuntimeError: boom"
+
+        normalize_annotation("annotation_id")
+
+        log.warning.assert_called_once()
+        newrelic.agent.record_custom_metrics.assert_called_once_with(
+            [("Custom/NormalizeAnnotation/failed", 1)]
+        )
+
+    @pytest.mark.usefixtures("annotation_read_service")
+    def test_a_quoteless_annotation_records_nothing(
+        self, normalization_service, newrelic
+    ):
+        normalization_service.normalize.return_value = None
+
+        normalize_annotation("annotation_id")
+
+        newrelic.agent.record_custom_metrics.assert_not_called()
+
+    def test_a_missing_annotation_is_logged_and_skipped(
+        self, annotation_read_service, normalization_service, log
     ):
         annotation_read_service.get_annotation_by_id.return_value = None
 
         normalize_annotation("missing")
 
         normalization_service.normalize.assert_not_called()
+        log.info.assert_called_once()
 
     @pytest.fixture
     def normalization_service(self, mock_service):
         return mock_service(NormalizationService)
+
+    @pytest.fixture
+    def log(self, patch):
+        return patch("h.tasks.annotations.log")
+
+    @pytest.fixture(autouse=True)
+    def newrelic(self, patch):
+        return patch("h.tasks.annotations.newrelic")
 
 
 @pytest.fixture(autouse=True)
