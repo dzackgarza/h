@@ -4,8 +4,9 @@
 // fetch the page, render each `<span class="math">` (or LaTeXML `<math>`) with KaTeX so its text
 // matches what a reader selected, build the page's rendered text with a segment map back to each
 // span's TeX, locate the quote in it, and re-emit the matched range with prose verbatim and math
-// as \(TeX\) / $$TeX$$. KaTeX reproduces MathJax's textContent (pylatexenc does not), which is why
-// this must run in Node.
+// as standard LaTeX ($TeX$ inline / $$TeX$$ display) -- copy-pastable into a normal LaTeX doc.
+// KaTeX is used only to reproduce MathJax's textContent for locating the quote (pylatexenc does
+// not), which is why this must run in Node; it is not the render target.
 //
 // Usage: node index.mjs <uri> <exact>   ->  prints the reconstructed quote, or empty when the
 // page exposes no recoverable math source for the selection (the caller then falls back to
@@ -37,7 +38,7 @@ async function main() {
   for (const span of document.querySelectorAll('span.math')) {
     const display = span.classList.contains('display');
     const tex = (span.textContent || '').trim().replace(/^\\[([]/, '').replace(/\\[)\]]$/, '').trim();
-    span.setAttribute('data-quote-tex', display ? `$$${tex}$$` : `\\(${tex}\\)`);
+    span.setAttribute('data-quote-tex', display ? `$$${tex}$$` : `$${tex}$`);
     span.textContent = renderText(tex, display);
   }
   for (const math of document.querySelectorAll('math')) {
@@ -45,7 +46,7 @@ async function main() {
       math.getAttribute('alttext') ||
       math.querySelector('annotation[encoding="application/x-tex"]')?.textContent ||
       '';
-    if (tex) math.setAttribute('data-quote-tex', `\\(${tex.trim()}\\)`);
+    if (tex) math.setAttribute('data-quote-tex', `$${tex.trim()}$`);
   }
 
   const root = document.querySelector('main') || document.body;

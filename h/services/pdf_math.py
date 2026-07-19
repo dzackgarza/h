@@ -145,9 +145,10 @@ def _ocr_latex(png: bytes) -> str:
             json={
                 "src": "data:image/png;base64," + base64.b64encode(png).decode(),
                 "formats": ["text"],
-                # Hypothesis's markdown renders math only in \(..\) (inline) or $$..$$
-                # (block) delimiters, never single $..$ -- so emit those, which agents read.
-                "math_inline_delimiters": ["\\(", "\\)"],
+                # Emit standard LaTeX: $..$ inline, $$..$$ display -- the recovered quote
+                # is stored verbatim and must paste into a normal LaTeX document without
+                # reformatting. The sidebar renders these with MathJax (full delimiter set).
+                "math_inline_delimiters": ["$", "$"],
                 "math_display_delimiters": ["$$", "$$"],
             },
             timeout=recovery_timeout(),

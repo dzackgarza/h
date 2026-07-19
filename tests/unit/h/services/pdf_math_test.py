@@ -85,12 +85,12 @@ def test_trim_to_quote_cuts_trailing_overcapture():
     # prose of the quote marks where to cut, and the math before it is preserved.
     exact = "the residue is some finite data attached"
     ocr = (
-        "the residue is \\(\\omega\\) some finite data attached. "
+        "the residue is $\\omega$ some finite data attached. "
         "Unrelated trailing text here."
     )
     assert (
         pdf_math._trim_to_quote(ocr, exact)  # noqa: SLF001
-        == "the residue is \\(\\omega\\) some finite data attached."
+        == "the residue is $\\omega$ some finite data attached."
     )
 
 
@@ -103,14 +103,14 @@ def test_clean_pdf_quote_returns_the_ocr_latex(monkeypatch):
     monkeypatch.setattr(
         pdf_math,
         "_ocr_latex",
-        lambda _png: r"the residue is \(\omega\) some finite data attached",
+        lambda _png: r"the residue is $\omega$ some finite data attached",
     )
 
     result = pdf_math.clean_pdf_quote(
         uri, 0, "the residue is some finite data attached"
     )
 
-    assert result == r"the residue is \(\omega\) some finite data attached"
+    assert result == r"the residue is $\omega$ some finite data attached"
 
 
 def test_clean_pdf_quote_raises_when_page_is_out_of_range():

@@ -12,7 +12,7 @@ class TestNormalize:
     def test_html_annotation_recovers_math_from_the_page_source(
         self, svc, html_source_extract, factories, db_session
     ):
-        html_source_extract.return_value = r"the moduli \(\mathcal{M}\) here"
+        html_source_extract.return_value = r"the moduli $\mathcal{M}$ here"
         annotation = self.annotation(factories, "the moduli M here", "https://ex.com/p")
 
         row = svc.normalize(annotation)
@@ -21,7 +21,7 @@ class TestNormalize:
         html_source_extract.assert_called_once_with(
             "https://ex.com/p", "the moduli M here"
         )
-        assert row.normalized_quote == r"the moduli \(\mathcal{M}\) here"
+        assert row.normalized_quote == r"the moduli $\mathcal{M}$ here"
         assert row.method == "html"
         assert row in db_session
 
@@ -52,7 +52,7 @@ class TestNormalize:
         assert self.rows(db_session, annotation) == 0
 
     def test_pdf_annotation_is_ocred(self, svc, clean_pdf_quote, factories, db_session):
-        clean_pdf_quote.return_value = r"2K \(\sim\) 0"
+        clean_pdf_quote.return_value = r"2K $\sim$ 0"
         annotation = self.annotation(
             factories, "2K ~ 0", "https://ex.com/paper.pdf", page=3
         )
@@ -61,7 +61,7 @@ class TestNormalize:
         db_session.flush()
 
         clean_pdf_quote.assert_called_once_with("https://ex.com/paper.pdf", 3, "2K ~ 0")
-        assert row.normalized_quote == r"2K \(\sim\) 0"
+        assert row.normalized_quote == r"2K $\sim$ 0"
         assert row.method == "ocr"
         assert row in db_session
 
@@ -91,7 +91,7 @@ class TestNormalize:
     def test_a_successful_recovery_logs_the_method_and_latency(
         self, svc, html_source_extract, factories, caplog
     ):
-        html_source_extract.return_value = r"the moduli \(\mathcal{M}\) here"
+        html_source_extract.return_value = r"the moduli $\mathcal{M}$ here"
         annotation = self.annotation(factories, "the moduli M here", "https://ex.com/p")
 
         with caplog.at_level("INFO", logger="h.services.normalization"):

@@ -466,7 +466,7 @@ class TestPostAnnotation:
     ):
         monkeypatch.setattr(
             "h.services.normalization._html_source_extract",
-            lambda _uri, _exact: r"the moduli \(\mathcal{M}\) here",
+            lambda _uri, _exact: r"the moduli $\mathcal{M}$ here",
         )
         _, token = user_with_token
         headers = {"Authorization": f"Bearer {token.value}"}
@@ -480,7 +480,7 @@ class TestPostAnnotation:
         res = app.post_json("/api/annotations", annotation, headers=headers)
 
         assert res.status_code == 200
-        assert res.json["normalized_quote"] == r"the moduli \(\mathcal{M}\) here"
+        assert res.json["normalized_quote"] == r"the moduli $\mathcal{M}$ here"
 
     def test_a_failed_normalization_rolls_the_create_back(
         self, app, db_session, user_with_token, monkeypatch
