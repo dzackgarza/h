@@ -15,6 +15,7 @@ SUBCOMMANDS = (
     "h.cli.commands.celery.celery",
     "h.cli.commands.devdata.devdata",
     "h.cli.commands.move_uri.move_uri",
+    "h.cli.commands.normalize_annotations.normalize_annotations",
     "h.cli.commands.normalize_uris.normalize_uris",
     "h.cli.commands.search.search",
     "h.cli.commands.user.user",
