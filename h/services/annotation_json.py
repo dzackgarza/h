@@ -91,6 +91,15 @@ class AnnotationJSONService:
             }
         )
 
+        # The display-ready quote: the selection with rendered math recovered (see the
+        # AnnotationNormalized model). Every view shows this; the raw selector quote is used
+        # only for anchoring. Falls back to the raw quote until enrichment has run.
+        model["normalized_quote"] = (
+            annotation.normalized.normalized_quote
+            if annotation.normalized
+            else self._raw_quote(annotation)
+        )
+
         author = self._user_service.fetch(annotation.userid)
         model["mentions"] = [
             MentionJSONPresenter(mention, self._request).asdict()
@@ -197,6 +206,16 @@ class AnnotationJSONService:
             return ModerationStatus.APPROVED.value
 
         return annotation.moderation_status.value
+
+    @staticmethod
+    def _raw_quote(annotation) -> str:
+        """The selection's raw text-layer / DOM quote, from its TextQuoteSelector — the
+        fallback shown until enrichment has produced a normalized quote."""
+        for target in annotation.target or []:
+            for selector in target.get("selector") or []:
+                if selector.get("type") == "TextQuoteSelector":
+                    return selector.get("exact", "")
+        return ""
 
 
 def factory(_context, request):
