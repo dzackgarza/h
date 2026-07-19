@@ -1,0 +1,23 @@
+# Local persistence + service behavior for this h backend (auto-merged with
+# docker-compose.yml). Upstream's dev compose is volume-less/throwaway; this box runs it
+# as a real service, so the data lives on bind-mounted host dirs and the containers
+# restart on boot. ES disk watermarks are set to absolute free-space (block only when
+# genuinely near-full) instead of the 95%-of-disk default that fired with 23G free.
+services:
+  postgres:
+    restart: unless-stopped
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+
+  elasticsearch:
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - cluster.routing.allocation.disk.watermark.low=10gb
+      - cluster.routing.allocation.disk.watermark.high=5gb
+      - cluster.routing.allocation.disk.watermark.flood_stage=2gb
+    volumes:
+      - ./data/elasticsearch:/usr/share/elasticsearch/data
+
+  rabbit:
+    restart: unless-stopped
