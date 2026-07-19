@@ -138,6 +138,12 @@ def includeme(config):  # noqa: PLR0915
         traverse="/{id}",
     )
     config.add_route(
+        "api.annotation.normalize",
+        "/api/annotations/{id:[A-Za-z0-9_-]{20,22}}/normalize",
+        factory="h.traversal:AnnotationRoot",
+        traverse="/{id}",
+    )
+    config.add_route(
         "api.annotation.jsonld",
         "/api/annotations/{id:[A-Za-z0-9_-]{20,22}}.jsonld",
         factory="h.traversal:AnnotationRoot",

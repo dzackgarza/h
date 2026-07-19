@@ -5,6 +5,7 @@ from pyramid.httpexceptions import HTTPNotFound
 from webob.multidict import MultiDict, NestedMultiDict
 
 from h.search.core import SearchResult
+from h.services.normalization import NormalizationService
 from h.traversal import AnnotationContext
 from h.views.api import annotations as views
 from h.views.api.exceptions import PayloadError
@@ -285,6 +286,37 @@ class TestReindex:
         )
 
         assert result == {"id": context.annotation.id, "indexed": True}
+
+
+class TestNormalize:
+    def test_it_resets_reenqueues_and_presents(
+        self,
+        annotation_context,
+        pyramid_request,
+        normalization_service,
+        annotation_json_service,
+        annotation_tasks,
+    ):
+        result = views.normalize(annotation_context, pyramid_request)
+
+        normalization_service.reset.assert_called_once_with(
+            annotation_context.annotation
+        )
+        annotation_tasks.normalize_annotation.delay.assert_called_once_with(
+            annotation_context.annotation.id
+        )
+        annotation_json_service.present.assert_called_once_with(
+            annotation=annotation_context.annotation, user=pyramid_request.user
+        )
+        assert result == annotation_json_service.present.return_value
+
+    @pytest.fixture
+    def normalization_service(self, mock_service):
+        return mock_service(NormalizationService)
+
+    @pytest.fixture(autouse=True)
+    def annotation_tasks(self, patch):
+        return patch("h.views.api.annotations.annotation_tasks")
 
 
 @pytest.fixture

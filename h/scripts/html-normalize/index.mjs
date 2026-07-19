@@ -87,6 +87,12 @@ async function main() {
   return replaced ? out : '';
 }
 
+// Exit 0 with the reconstructed quote (empty = quote spans no math / not located: a
+// legitimate "nothing to do"). Exit 1 with the reason on stderr for a hard failure (page
+// fetch, parse) so the caller records it as a failure rather than a silent raw result.
 main()
   .then(out => process.stdout.write(out || ''))
-  .catch(() => process.stdout.write(''));
+  .catch(err => {
+    process.stderr.write(String((err && err.stack) || err));
+    process.exitCode = 1;
+  });

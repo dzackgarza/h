@@ -11,7 +11,7 @@ class TestNormalize:
     def test_html_annotation_recovers_math_via_the_node_normalizer(
         self, svc, html_normalize, factories
     ):
-        html_normalize.return_value = r"the moduli \(\mathcal{M}\) here"
+        html_normalize.return_value = (r"the moduli \(\mathcal{M}\) here", None)
         annotation = self.annotation(factories, "the moduli M here", "https://ex.com/p")
 
         row = svc.normalize(annotation)
@@ -21,16 +21,39 @@ class TestNormalize:
         assert row.method == "html"
         assert row.error is None
 
-    def test_html_annotation_with_no_recoverable_math_stores_raw(
+    def test_html_annotation_with_no_math_signal_stores_raw(
         self, svc, html_normalize, factories
     ):
-        html_normalize.return_value = ""  # the Node normalizer found no math
+        html_normalize.return_value = ("", None)  # normalizer ran clean, found no math
         annotation = self.annotation(factories, "plain prose", "https://ex.com/p")
 
         row = svc.normalize(annotation)
 
         assert row.normalized_quote == "plain prose"
         assert row.method == "raw"
+        assert row.error is None  # no math signal -> a legitimate raw, not a failure
+
+    def test_html_normalizer_error_is_recorded(self, svc, html_normalize, factories):
+        html_normalize.return_value = ("", "html-normalize failed: fetch failed")
+        annotation = self.annotation(factories, "the moduli M here", "https://ex.com/p")
+
+        row = svc.normalize(annotation)
+
+        assert row.method == "raw"
+        assert row.error == "html-normalize failed: fetch failed"
+
+    def test_html_math_that_cannot_be_reconstructed_is_recorded(
+        self, svc, html_normalize, factories
+    ):
+        # The quote carries a math signal (𝕄, Mathematical Alphanumeric) but the normalizer
+        # came back empty -- a miss, not "no math": record it as a failure, not a silent raw.
+        html_normalize.return_value = ("", None)
+        annotation = self.annotation(factories, "the space 𝕄 here", "https://ex.com/p")
+
+        row = svc.normalize(annotation)
+
+        assert row.method == "raw"
+        assert row.error == "HTML math could not be reconstructed"
 
     def test_pdf_annotation_is_ocred(self, svc, clean_pdf_quote, factories):
         clean_pdf_quote.return_value = r"2K \(\sim\) 0"
@@ -57,6 +80,21 @@ class TestNormalize:
 
         assert row.method == "raw"
         assert row.error is None
+
+    def test_pdf_math_that_cannot_be_located_is_recorded(
+        self, svc, clean_pdf_quote, factories
+    ):
+        # The quote carries a math signal (∼, a math operator) but OCR came back with the raw
+        # text -- the region couldn't be located: record it, don't degrade to a silent raw.
+        clean_pdf_quote.return_value = "2K ∼ 0"
+        annotation = self.annotation(
+            factories, "2K ∼ 0", "https://ex.com/paper.pdf", page=2
+        )
+
+        row = svc.normalize(annotation)
+
+        assert row.method == "raw"
+        assert row.error == "PDF math region could not be located for OCR"
 
     def test_a_recovery_failure_is_recorded_not_raised(
         self, svc, clean_pdf_quote, factories
@@ -87,7 +125,7 @@ class TestNormalize:
         factories.AnnotationNormalized(
             annotation=annotation, normalized_quote="the M here", method="raw"
         )
-        html_normalize.return_value = r"the \(\mathcal{M}\) here"
+        html_normalize.return_value = (r"the \(\mathcal{M}\) here", None)
 
         svc.normalize(annotation)
         db_session.flush()
@@ -117,6 +155,33 @@ class TestNormalize:
     @pytest.fixture
     def clean_pdf_quote(self, patch):
         return patch("h.services.normalization.clean_pdf_quote")
+
+
+class TestReset:
+    def test_it_drops_the_normalized_row(self, db_session, factories):
+        annotation = factories.Annotation()
+        factories.AnnotationNormalized(
+            annotation=annotation, method="raw", error="boom"
+        )
+        db_session.flush()
+
+        NormalizationService(db_session).reset(annotation)
+        db_session.flush()
+
+        assert annotation.normalized is None
+        assert (
+            db_session.query(AnnotationNormalized)
+            .filter_by(annotation_id=annotation.id)
+            .count()
+            == 0
+        )
+
+    def test_it_is_a_noop_when_there_is_no_row(self, db_session, factories):
+        annotation = factories.Annotation()
+
+        NormalizationService(db_session).reset(annotation)  # does not raise
+
+        assert annotation.normalized is None
 
 
 class TestResolvePdfUrl:

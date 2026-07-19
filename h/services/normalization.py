@@ -14,6 +14,7 @@ quote (``method='raw'``).
 
 from __future__ import annotations
 
+import re
 import subprocess
 from pathlib import Path
 
@@ -21,11 +22,21 @@ from sqlalchemy import orm, select
 
 from h.models import Annotation, AnnotationNormalized
 from h.models.document import DocumentURI
-from h.services.pdf_math import clean_pdf_quote
+from h.services.pdf_math import clean_pdf_quote, pdf_has_math
 
 _HTML_NORMALIZE = (
     Path(__file__).resolve().parents[1] / "scripts" / "html-normalize" / "index.mjs"
 )
+
+# Mathematical Alphanumeric Symbols, invisible math operators, or LaTeXML accessibility
+# markers -- signals that an HTML quote spans rendered math (so an empty reconstruction means
+# the recovery missed, not that there was no math). Mirrors the PDF signal in pdf_math.
+_HTML_MATH_SIGNAL = re.compile("[\U0001d400-\U0001d7ff⁡-⁤]|start_POST(?:SUB|SUPER)SCRIPT")
+
+
+def _html_has_math(quote: str) -> bool:
+    """Whether an HTML quote plausibly spans rendered math worth reconstructing."""
+    return bool(_HTML_MATH_SIGNAL.search(quote))
 
 
 def _page_index(annotation: Annotation) -> int | None:
@@ -41,11 +52,14 @@ def _page_index(annotation: Annotation) -> int | None:
     return None
 
 
-def _html_normalize(uri: str, exact: str) -> str:
+def _html_normalize(uri: str, exact: str) -> tuple[str, str | None]:
     """Reconstruct an HTML quote's math via the bundled Node (KaTeX) normalizer.
 
-    Returns ``""`` on any failure. KaTeX reproduces the page's MathJax rendering, which pure
-    Python cannot.
+    Returns ``(reconstructed_quote, error)``. On success ``error`` is ``None`` and the quote
+    is the reconstruction (``""`` when the selection spans no math -- a legitimate no-op). On
+    a hard failure (page fetch, parse, a crashed script) the quote is ``""`` and ``error`` is
+    the reason, so the caller records a failure rather than a silent raw result. KaTeX
+    reproduces the page's MathJax rendering, which pure Python cannot.
     """
     try:
         result = subprocess.run(  # noqa: S603 - fixed script path, args are data
@@ -55,9 +69,28 @@ def _html_normalize(uri: str, exact: str) -> str:
             timeout=60,
             check=False,
         )
-        return result.stdout.strip()
-    except (OSError, subprocess.SubprocessError):
-        return ""
+    except (OSError, subprocess.SubprocessError) as exc:
+        return ("", f"html-normalize subprocess failed: {exc}")
+    if result.returncode != 0:
+        reason = result.stderr.strip()[:500] or f"exit {result.returncode}"
+        return ("", f"html-normalize failed: {reason}")
+    return (result.stdout.strip(), None)
+
+
+def _recover_html(uri: str, quote: str) -> tuple[str, str, str | None]:
+    """Reconstruct HTML math, or record why it couldn't.
+
+    A normalizer error, or a math signal that came back with an empty reconstruction, is
+    returned as the raw quote with an ``error``.
+    """
+    clean, error = _html_normalize(uri, quote)
+    if error:
+        return (quote, "raw", error)
+    if clean and clean != quote:
+        return (clean, "html", None)
+    if _html_has_math(quote):  # had math, but reconstruction came back empty
+        return (quote, "raw", "HTML math could not be reconstructed")
+    return (quote, "raw", None)
 
 
 class NormalizationService:
@@ -83,33 +116,49 @@ class NormalizationService:
             self._session.add(row)
         return row
 
+    def reset(self, annotation: Annotation) -> None:
+        """Drop ``annotation``'s normalized row so its status returns to pending.
+
+        The retry endpoint calls this before re-enqueuing, so a failed annotation flips to
+        pending immediately rather than reporting the stale failure until the task re-runs.
+        """
+        if annotation.normalized is not None:
+            self._session.delete(annotation.normalized)
+            annotation.normalized = None
+
     def _recover(self, annotation: Annotation) -> tuple[str, str, str | None] | None:
         """Recover ``(normalized_quote, method, error)``, or ``None`` for a quote-less one.
 
-        A recovery failure (PDF fetch/OCR, page parse) is caught and returned as the raw quote
-        with an ``error`` message, not raised: one bad document must neither crash the
-        enrichment task nor lose the annotation. The error is recorded on the row and logged
-        by the caller -- observable, never swallowed.
+        Every failure is recorded, never swallowed: a raised error (PDF fetch/OCR, page parse)
+        is caught, and a *soft* miss -- the quote carries a math signal but recovery came back
+        empty -- is also returned with an ``error``, not a silent ``raw``. A quote with no math
+        signal is a legitimate ``raw`` (``error`` NULL). One bad document neither crashes the
+        enrichment task nor loses the annotation.
         """
         quote = annotation.quote or ""
         if not quote:
             return None
         uri = annotation.target_uri or ""
-
         page = _page_index(annotation)
         try:
             if page is not None:  # PDF annotation
-                url = self._resolve_pdf_url(uri)
-                clean = clean_pdf_quote(url, page, quote) if url else quote
-                return (clean, "ocr", None) if clean != quote else (quote, "raw", None)
-
+                return self._recover_pdf(uri, page, quote)
             if uri.startswith(("http://", "https://")):  # HTML annotation
-                clean = _html_normalize(uri, quote)
-                if clean and clean != quote:
-                    return (clean, "html", None)
+                return _recover_html(uri, quote)
         except Exception as exc:  # noqa: BLE001 - recorded on the row and logged, never swallowed
             return (quote, "raw", f"{type(exc).__name__}: {exc}")
+        return (quote, "raw", None)
 
+    def _recover_pdf(
+        self, uri: str, page: int, quote: str
+    ) -> tuple[str, str, str | None]:
+        """OCR the PDF math region, or record why it couldn't (a math signal but no result)."""
+        url = self._resolve_pdf_url(uri)
+        clean = clean_pdf_quote(url, page, quote) if url else quote
+        if clean != quote:
+            return (clean, "ocr", None)
+        if pdf_has_math(quote):  # had math, but the region couldn't be located/OCR'd
+            return (quote, "raw", "PDF math region could not be located for OCR")
         return (quote, "raw", None)
 
     def _resolve_pdf_url(self, uri: str) -> str | None:

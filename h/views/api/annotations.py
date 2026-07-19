@@ -28,7 +28,8 @@ from h.schemas.annotation import (
 )
 from h.schemas.util import validate_query_params
 from h.security import Permission
-from h.services import AnnotationWriteService
+from h.services import AnnotationWriteService, NormalizationService
+from h.tasks import annotations as annotation_tasks
 from h.views.api.config import api_config
 from h.views.api.helpers.json_payload import json_payload
 
@@ -190,6 +191,29 @@ def reindex(context, request):
     search_index.add_annotation(context.annotation, refresh=True)
 
     return {"id": context.annotation.id, "indexed": True}
+
+
+@api_config(
+    versions=["v1", "v2"],
+    route_name="api.annotation.normalize",
+    request_method="POST",
+    permission=Permission.Annotation.READ,
+    link_name="annotation.normalize",
+    description="Re-run math normalization for an annotation",
+)
+def normalize(context, request):
+    """Reset and re-enqueue math normalization for an annotation.
+
+    The annotation flips to ``normalization_status: "pending"`` immediately; the worker then
+    fills in ``ready`` or ``failed``. Lets a reader retry a normalization that failed.
+    """
+    annotation = context.annotation
+    request.find_service(NormalizationService).reset(annotation)
+    annotation_tasks.normalize_annotation.delay(annotation.id)
+
+    return request.find_service(name="annotation_json").present(
+        annotation=annotation, user=request.user
+    )
 
 
 def _publish_annotation_event(request, annotation, action):

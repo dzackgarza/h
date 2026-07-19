@@ -59,10 +59,48 @@ class TestAnnotationJSONService:
             "flagged": flag_service.flagged.return_value,
             "moderation": {"flagCount": flag_service.flag_count.return_value},
             "actions": ["moderate"],
+            "normalized_quote": (
+                "If you wish to install Hypothesis on your own site then head "
+                "over to GitHub."
+            ),
+            "normalization_status": "pending",
         }
 
         DocumentJSONPresenter.assert_called_once_with(annotation.document)
         DocumentJSONPresenter.return_value.asdict.assert_called_once_with()
+
+    def test_present_normalization_pending_when_no_row(self, service, annotation):
+        result = service.present(annotation)
+
+        assert result["normalization_status"] == "pending"
+        assert "normalization_error" not in result
+
+    def test_present_normalization_ready(self, service, annotation, factories):
+        factories.AnnotationNormalized(
+            annotation=annotation, normalized_quote=r"the \(x\) here", method="html"
+        )
+
+        result = service.present(annotation)
+
+        assert result["normalization_status"] == "ready"
+        assert result["normalized_quote"] == r"the \(x\) here"
+        assert "normalization_error" not in result
+
+    def test_present_normalization_failed_surfaces_the_error(
+        self, service, annotation, factories
+    ):
+        factories.AnnotationNormalized(
+            annotation=annotation,
+            normalized_quote="raw floor",
+            method="raw",
+            error="html-normalize failed: fetch failed",
+        )
+
+        result = service.present(annotation)
+
+        assert result["normalization_status"] == "failed"
+        assert result["normalization_error"] == "html-normalize failed: fetch failed"
+        assert result["normalized_quote"] == "raw floor"
 
     def test_present_with_metadata(self, service, annotation):
         data = {

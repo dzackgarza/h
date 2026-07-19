@@ -91,14 +91,22 @@ class AnnotationJSONService:
             }
         )
 
-        # The display-ready quote: the selection with rendered math recovered (see the
-        # AnnotationNormalized model). Every view shows this; the raw selector quote is used
-        # only for anchoring. Falls back to the raw quote until enrichment has run.
-        model["normalized_quote"] = (
-            annotation.normalized.normalized_quote
-            if annotation.normalized
-            else self._raw_quote(annotation)
-        )
+        # The display-ready quote (the selection with rendered math recovered; see the
+        # AnnotationNormalized model) plus the enrichment status, so the client can show a
+        # spinner while it's pending and an error + retry when it failed rather than trusting
+        # the raw fallback. ``normalized_quote`` always carries something renderable: the
+        # recovered quote when ready, the raw capture otherwise.
+        normalized = annotation.normalized
+        if normalized is None:
+            model["normalized_quote"] = self._raw_quote(annotation)
+            model["normalization_status"] = "pending"
+        elif normalized.error:
+            model["normalized_quote"] = normalized.normalized_quote
+            model["normalization_status"] = "failed"
+            model["normalization_error"] = normalized.error
+        else:
+            model["normalized_quote"] = normalized.normalized_quote
+            model["normalization_status"] = "ready"
 
         author = self._user_service.fetch(annotation.userid)
         model["mentions"] = [
@@ -209,8 +217,10 @@ class AnnotationJSONService:
 
     @staticmethod
     def _raw_quote(annotation) -> str:
-        """The selection's raw text-layer / DOM quote, from its TextQuoteSelector — the
-        fallback shown until enrichment has produced a normalized quote."""
+        """Read the selection's raw text-layer / DOM quote from its TextQuoteSelector.
+
+        This is the fallback shown until enrichment has produced a normalized quote.
+        """
         for target in annotation.target or []:
             for selector in target.get("selector") or []:
                 if selector.get("type") == "TextQuoteSelector":
