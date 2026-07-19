@@ -21,15 +21,16 @@ from pyramid.httpexceptions import HTTPNotFound
 from h import search as search_lib
 from h.events import AnnotationEvent
 from h.presenters import AnnotationJSONLDPresenter
+from h.schemas import ValidationError
 from h.schemas.annotation import (
     CreateAnnotationSchema,
     SearchParamsSchema,
     UpdateAnnotationSchema,
+    has_text_quote,
 )
 from h.schemas.util import validate_query_params
 from h.security import Permission
 from h.services import AnnotationWriteService, NormalizationService
-from h.tasks import annotations as annotation_tasks
 from h.views.api.config import api_config
 from h.views.api.helpers.json_payload import json_payload
 
@@ -81,9 +82,24 @@ def create(request):
     schema = CreateAnnotationSchema(request)
     appstruct = schema.validate(json_payload(request))
 
+    # A top-level annotation must select text: there are no quote-less annotations (the old
+    # urn:annotate:marker session markers are gone), and math normalization needs a quote to
+    # recover. Replies legitimately carry no selection, so they are exempt.
+    if not appstruct["references"] and not has_text_quote(
+        appstruct.get("target_selectors")
+    ):
+        raise ValidationError(
+            _("An annotation must select some text (a TextQuoteSelector).")
+        )
+
     annotation = request.find_service(AnnotationWriteService).create_annotation(
         data=appstruct
     )
+
+    # Recover the display-ready (math-normalized) quote synchronously, in this request's
+    # transaction. A genuine recovery failure raises MathRecoveryError, which pyramid_tm
+    # turns into a rollback: the annotation is never persisted with a raw quote.
+    request.find_service(NormalizationService).normalize(annotation)
 
     _publish_annotation_event(request, annotation, "create")
 
@@ -191,29 +207,6 @@ def reindex(context, request):
     search_index.add_annotation(context.annotation, refresh=True)
 
     return {"id": context.annotation.id, "indexed": True}
-
-
-@api_config(
-    versions=["v1", "v2"],
-    route_name="api.annotation.normalize",
-    request_method="POST",
-    permission=Permission.Annotation.READ,
-    link_name="annotation.normalize",
-    description="Re-run math normalization for an annotation",
-)
-def normalize(context, request):
-    """Reset and re-enqueue math normalization for an annotation.
-
-    The annotation flips to ``normalization_status: "pending"`` immediately; the worker then
-    fills in ``ready`` or ``failed``. Lets a reader retry a normalization that failed.
-    """
-    annotation = context.annotation
-    request.find_service(NormalizationService).reset(annotation)
-    annotation_tasks.normalize_annotation.delay(annotation.id)
-
-    return request.find_service(name="annotation_json").present(
-        annotation=annotation, user=request.user
-    )
 
 
 def _publish_annotation_event(request, annotation, action):

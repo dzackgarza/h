@@ -91,22 +91,16 @@ class AnnotationJSONService:
             }
         )
 
-        # The display-ready quote (the selection with rendered math recovered; see the
-        # AnnotationNormalized model) plus the enrichment status, so the client can show a
-        # spinner while it's pending and an error + retry when it failed rather than trusting
-        # the raw fallback. ``normalized_quote`` always carries something renderable: the
-        # recovered quote when ready, the raw capture otherwise.
+        # The display-ready quote: the selection with rendered math recovered (see the
+        # AnnotationNormalized model). Created synchronously in the same transaction as the
+        # annotation, so a stored annotation always has one and never shows the raw capture.
+        # The raw fallback only covers legacy rows predating synchronous normalization.
         normalized = annotation.normalized
-        if normalized is None:
-            model["normalized_quote"] = self._raw_quote(annotation)
-            model["normalization_status"] = "pending"
-        elif normalized.error:
-            model["normalized_quote"] = normalized.normalized_quote
-            model["normalization_status"] = "failed"
-            model["normalization_error"] = normalized.error
-        else:
-            model["normalized_quote"] = normalized.normalized_quote
-            model["normalization_status"] = "ready"
+        model["normalized_quote"] = (
+            normalized.normalized_quote
+            if normalized is not None
+            else self._raw_quote(annotation)
+        )
 
         author = self._user_service.fetch(annotation.userid)
         model["mentions"] = [

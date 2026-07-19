@@ -63,44 +63,33 @@ class TestAnnotationJSONService:
                 "If you wish to install Hypothesis on your own site then head "
                 "over to GitHub."
             ),
-            "normalization_status": "pending",
         }
 
         DocumentJSONPresenter.assert_called_once_with(annotation.document)
         DocumentJSONPresenter.return_value.asdict.assert_called_once_with()
 
-    def test_present_normalization_pending_when_no_row(self, service, annotation):
-        result = service.present(annotation)
-
-        assert result["normalization_status"] == "pending"
-        assert "normalization_error" not in result
-
-    def test_present_normalization_ready(self, service, annotation, factories):
+    def test_present_surfaces_the_normalized_quote_from_the_row(
+        self, service, annotation, factories
+    ):
         factories.AnnotationNormalized(
             annotation=annotation, normalized_quote=r"the \(x\) here", method="html"
         )
 
         result = service.present(annotation)
 
-        assert result["normalization_status"] == "ready"
         assert result["normalized_quote"] == r"the \(x\) here"
+        assert "normalization_status" not in result
         assert "normalization_error" not in result
 
-    def test_present_normalization_failed_surfaces_the_error(
-        self, service, annotation, factories
+    def test_present_falls_back_to_the_raw_quote_for_a_legacy_rowless_annotation(
+        self, service, annotation
     ):
-        factories.AnnotationNormalized(
-            annotation=annotation,
-            normalized_quote="raw floor",
-            method="raw",
-            error="html-normalize failed: fetch failed",
-        )
-
+        # Synchronous normalization gives every new annotation a row; only rows predating it
+        # are absent, and then the presenter shows the raw capture rather than crashing.
         result = service.present(annotation)
 
-        assert result["normalization_status"] == "failed"
-        assert result["normalization_error"] == "html-normalize failed: fetch failed"
-        assert result["normalized_quote"] == "raw floor"
+        assert "normalization_status" not in result
+        assert result["normalized_quote"] == annotation.quote
 
     def test_present_with_metadata(self, service, annotation):
         data = {

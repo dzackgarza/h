@@ -327,23 +327,6 @@ class TestPublishAnnotationEventForAuthority:
         )
 
 
-class TestNormalizeAnnotation:
-    @pytest.mark.parametrize("action", ["create", "update"])
-    def test_it_queues_enrichment(self, pyramid_request, annotations, action):
-        event = AnnotationEvent(pyramid_request, "annotation_id", action)
-
-        subscribers.normalize_annotation(event)
-
-        annotations.normalize_annotation.delay.assert_called_once_with("annotation_id")
-
-    def test_it_does_nothing_on_delete(self, pyramid_request, annotations):
-        event = AnnotationEvent(pyramid_request, "annotation_id", "delete")
-
-        subscribers.normalize_annotation(event)
-
-        annotations.normalize_annotation.delay.assert_not_called()
-
-
 class TestSendModerationNotifications:
     def test_it(self, pyramid_request, moderation_service):
         event = ModeratedAnnotationEvent(pyramid_request, sentinel.moderation_log_id)

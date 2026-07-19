@@ -11,6 +11,7 @@ from pyramid.exceptions import BadCSRFOrigin, BadCSRFToken
 from pyramid.view import forbidden_view_config, notfound_view_config, view_config
 
 from h.i18n import TranslationString as _
+from h.services.pdf_math import MathRecoveryError
 from h.util.view import handle_exception, json_view
 from h.views.api.config import cors_policy
 from h.views.api.decorators import (
@@ -55,6 +56,17 @@ def api_error(context, request):
     """Handle an expected/deliberately thrown API exception."""
     request.response.status_code = context.status_code
     return {"status": "failure", "reason": context.detail}
+
+
+@json_view(context=MathRecoveryError, path_info="/api/", decorator=cors_policy)
+def math_recovery_error(context, request):
+    """Handle a failed math normalization at annotation intake.
+
+    The 5xx status makes pyramid_tm roll the create back (nothing is persisted with a raw
+    quote); the client shows a toast and Save is the retry.
+    """
+    request.response.status_code = 500
+    return {"status": "failure", "reason": str(context)}
 
 
 @json_view(context=JSONAPIError, path_info="/api/bulk", decorator=cors_policy)

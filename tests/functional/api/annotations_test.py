@@ -1,7 +1,12 @@
 import elasticsearch_dsl
 import pytest
 
-from h.models import GroupMembership, GroupMembershipRoles, ModerationStatus
+from h.models import Annotation, GroupMembership, GroupMembershipRoles, ModerationStatus
+from h.services.pdf_math import MathRecoveryError
+
+# A minimal selector marking a text selection: a top-level create requires one, and it is
+# what math normalization recovers from.
+_QUOTE_TARGET = [{"selector": [{"type": "TextQuoteSelector", "exact": "the moduli M"}]}]
 
 pytestmark = pytest.mark.usefixtures("init_elasticsearch")
 
@@ -433,6 +438,7 @@ class TestPostAnnotation:
             },
             "text": "My annotation",
             "uri": "http://example.com",
+            "target": _QUOTE_TARGET,
         }
 
         res = app.post_json(
@@ -442,20 +448,65 @@ class TestPostAnnotation:
         assert res.status_code == 400
         assert res.json["reason"].startswith("group:")
 
-    # TODO: This endpoint should return a 201  # noqa: FIX002, TD002, TD003
-    def test_it_returns_http_200_when_annotation_created(self, app, user_with_token):
+    def test_it_rejects_a_quote_less_top_level_create(self, app, user_with_token):
         _, token = user_with_token
+        headers = {"Authorization": f"Bearer {token.value}"}
+        annotation = {"group": "__world__", "text": "note", "uri": "http://example.com"}
 
+        res = app.post_json(
+            "/api/annotations", annotation, headers=headers, expect_errors=True
+        )
+
+        assert res.status_code == 400
+        assert "TextQuoteSelector" in res.json["reason"]
+
+    # TODO: This endpoint should return a 201  # noqa: FIX002, TD002, TD003
+    def test_it_returns_the_normalized_quote_when_created(
+        self, app, user_with_token, monkeypatch
+    ):
+        monkeypatch.setattr(
+            "h.services.normalization._html_source_extract",
+            lambda _uri, _exact: r"the moduli \(\mathcal{M}\) here",
+        )
+        _, token = user_with_token
         headers = {"Authorization": f"Bearer {token.value}"}
         annotation = {
             "group": "__world__",
             "text": "My annotation",
             "uri": "http://example.com",
+            "target": _QUOTE_TARGET,
         }
 
         res = app.post_json("/api/annotations", annotation, headers=headers)
 
         assert res.status_code == 200
+        assert res.json["normalized_quote"] == r"the moduli \(\mathcal{M}\) here"
+
+    def test_a_failed_normalization_rolls_the_create_back(
+        self, app, db_session, user_with_token, monkeypatch
+    ):
+        # A genuine recovery failure must persist nothing: the annotation count is unchanged.
+        def _raise(_uri, _exact):
+            msg = "boom"
+            raise MathRecoveryError(msg)
+
+        monkeypatch.setattr("h.services.normalization._html_source_extract", _raise)
+        _, token = user_with_token
+        headers = {"Authorization": f"Bearer {token.value}"}
+        annotation = {
+            "group": "__world__",
+            "text": "My annotation",
+            "uri": "http://example.com",
+            "target": _QUOTE_TARGET,
+        }
+        before = db_session.query(Annotation).count()
+
+        res = app.post_json(
+            "/api/annotations", annotation, headers=headers, expect_errors=True
+        )
+
+        assert res.status_code == 500
+        assert db_session.query(Annotation).count() == before
 
 
 class TestPatchAnnotation:

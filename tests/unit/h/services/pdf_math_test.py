@@ -4,26 +4,18 @@ The OCR itself is Mathpix's correctness, proven out-of-band. What this module ow
 what these tests prove, is: locating the annotation's region as the bounding box of the
 selected text -- every line it spans, at the text column's width -- so the right slice of
 the page is what gets OCR'd, and trimming the OCR back to the selection. On a locating
-miss, the honest raw quote is kept instead of the wrong region. Region logic runs against
-a real PyMuPDF document with text at known positions: a real boundary, no network, no OCR.
+miss (or an out-of-range page or empty OCR) it raises rather than OCR the wrong region or
+return raw. Region logic runs against a real PyMuPDF document with text at known
+positions: a real boundary, no network, no OCR.
 """
 
 from __future__ import annotations
 
 import fitz
+import pytest
 
 from h.services import pdf_math
-
-
-def test_pdf_has_math_fires_on_operators_but_not_plain_prose():
-    # Real quotes: an inline relation carries a math operator; a plain sentence does not.
-    assert pdf_math.pdf_has_math(
-        "They satisfy 2K ∼ 0 and q = 0"
-    )  # ∼ is a math operator
-    assert pdf_math.pdf_has_math("the involution ιdP on X")  # ι is Greek
-    assert not pdf_math.pdf_has_math(
-        "parameterizes the same surfaces, with finite data attached"
-    )
+from h.services.pdf_math import MathRecoveryError
 
 
 def _doc_with_lines(lines: list[tuple[float, str]]) -> fitz.Document:
@@ -101,19 +93,46 @@ def test_trim_to_quote_cuts_trailing_overcapture():
     )
 
 
-def test_clean_pdf_quote_keeps_raw_when_page_is_out_of_range():
-    doc = _doc_with_lines([(100, "single page document")])
-    uri = "http://test.invalid/a.pdf"
+def test_clean_pdf_quote_returns_the_ocr_latex(monkeypatch):
+    # The located region is OCR'd; the trimmed OCR LaTeX is what's returned (never the raw
+    # text-layer quote). OCR itself is Mathpix's job, mocked here.
+    doc = _doc_with_lines([(100, "the residue is some finite data attached here")])
+    uri = "http://test.invalid/ok.pdf"
     pdf_math._pdf_cache[uri] = doc.tobytes()  # noqa: SLF001 - seed fetch cache: real bytes, no network
-    assert (
-        pdf_math.clean_pdf_quote(uri, 5, "the raw exact quote") == "the raw exact quote"
+    monkeypatch.setattr(
+        pdf_math,
+        "_ocr_latex",
+        lambda _png: r"the residue is \(\omega\) some finite data attached",
     )
 
+    result = pdf_math.clean_pdf_quote(
+        uri, 0, "the residue is some finite data attached"
+    )
 
-def test_clean_pdf_quote_keeps_raw_when_region_cannot_be_located():
+    assert result == r"the residue is \(\omega\) some finite data attached"
+
+
+def test_clean_pdf_quote_raises_when_page_is_out_of_range():
+    doc = _doc_with_lines([(100, "single page document")])
+    uri = "http://test.invalid/a.pdf"
+    pdf_math._pdf_cache[uri] = doc.tobytes()  # noqa: SLF001
+    with pytest.raises(MathRecoveryError, match="out of range"):
+        pdf_math.clean_pdf_quote(uri, 5, "the raw exact quote")
+
+
+def test_clean_pdf_quote_raises_when_region_cannot_be_located():
     doc = _doc_with_lines([(100, "some unrelated prose")])
     uri = "http://test.invalid/b.pdf"
     pdf_math._pdf_cache[uri] = doc.tobytes()  # noqa: SLF001
-    # A quote that isn't on the page -> no region -> raw quote, never an OCR of the wrong slice.
-    quote = "a selection that does not occur on this page"
-    assert pdf_math.clean_pdf_quote(uri, 0, quote) == quote
+    # A quote that isn't on the page -> no region -> raise, never an OCR of the wrong slice.
+    with pytest.raises(MathRecoveryError, match="could not be located"):
+        pdf_math.clean_pdf_quote(uri, 0, "a selection that does not occur on this page")
+
+
+def test_clean_pdf_quote_raises_when_ocr_is_empty(monkeypatch):
+    doc = _doc_with_lines([(100, "the residue is some finite data attached here")])
+    uri = "http://test.invalid/empty.pdf"
+    pdf_math._pdf_cache[uri] = doc.tobytes()  # noqa: SLF001
+    monkeypatch.setattr(pdf_math, "_ocr_latex", lambda _png: "")
+    with pytest.raises(MathRecoveryError, match="empty"):
+        pdf_math.clean_pdf_quote(uri, 0, "the residue is some finite data attached")

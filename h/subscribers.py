@@ -180,22 +180,6 @@ def publish_annotation_event_for_authority(event):
     )
 
 
-@subscriber(AnnotationEvent)
-def normalize_annotation(event):
-    """Enqueue enrichment of the annotation's display-ready quote (rendered math -> LaTeX).
-
-    Fires on create/update (the quote can change on a re-anchor); a delete cascades the
-    normalized row away, so there's nothing to do.
-    """
-    if event.action == "delete":
-        return
-    try:
-        annotations.normalize_annotation.delay(event.annotation_id)
-    except OperationalError as err:  # pragma: no cover
-        # We could not connect to rabbit! So carry on.
-        report_exception(err)
-
-
 @subscriber(ModeratedAnnotationEvent)
 def send_moderation_notification(event: ModeratedAnnotationEvent) -> None:
     event.request.find_service(

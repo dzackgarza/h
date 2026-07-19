@@ -21,29 +21,25 @@ import re
 import fitz  # pymupdf
 import requests
 
-# Greek letters and math operators survive a PDF text-layer selection as ordinary Unicode
-# (not the Mathematical Alphanumeric block the HTML garble uses), so they -- not that block
-# -- are the signal that a PDF quote spans math worth OCR'ing.
-_PDF_MATH = re.compile(
-    "["
-    "Ͱ-Ͽ"  # Greek
-    "∀-⋿"  # mathematical operators
-    "⨀-⫿"  # supplemental math operators
-    "⟀-⟿"  # misc math symbols-A
-    "←-⇿"  # arrows
-    "]"
-)
-
 _DPI = 220  # render resolution of the cropped region; reads cleanly for Mathpix
 
 
-def pdf_has_math(quote: str) -> bool:
-    """Report whether a PDF text-layer quote plausibly spans math worth OCR'ing.
+class MathRecoveryError(Exception):
+    """A math recovery genuinely failed, so no display quote can be produced.
 
-    True when it contains a Greek letter or math operator -- the symbols a PDF selection
-    keeps as ordinary Unicode.
+    Raised (never returning the raw text-layer capture) for every failure mode -- an
+    out-of-range page, a region that can't be located, empty OCR, a Mathpix/subprocess
+    error or timeout. In the create path this propagates to ``pyramid_tm``, which rolls the
+    request back so nothing is persisted: a stored annotation never carries raw garble.
     """
-    return bool(_PDF_MATH.search(quote))
+
+
+def recovery_timeout() -> float:
+    """Seconds before a recovery call (Mathpix OCR, the Node extractor) is abandoned.
+
+    Env-configurable via ``H_MATH_NORMALIZE_TIMEOUT`` (default 30); exceeding it raises.
+    """
+    return float(os.environ.get("H_MATH_NORMALIZE_TIMEOUT", "30"))
 
 
 def _norm(text: str) -> str:
@@ -148,7 +144,7 @@ def _ocr_latex(png: bytes) -> str:
             "math_inline_delimiters": ["\\(", "\\)"],
             "math_display_delimiters": ["$$", "$$"],
         },
-        timeout=60,
+        timeout=recovery_timeout(),
     )
     resp.raise_for_status()
     return resp.json().get("text", "").strip()
@@ -171,15 +167,22 @@ def _fetch_pdf(uri: str) -> bytes:
 def clean_pdf_quote(uri: str, page_index: int, exact: str) -> str:
     """Recover clean LaTeX for a PDF annotation by OCR'ing the region it occupies.
 
-    The region is the bounding box of ``exact`` located from the page's own words. Returns
-    ``exact`` (the raw text-layer quote) unchanged when the page or region can't be resolved,
-    so a locating miss degrades to honest raw text rather than wrong math.
+    The region is the bounding box of ``exact`` located from the page's own words. Raises
+    ``MathRecoveryError`` -- never returns the raw text-layer quote -- when the page is out of
+    range, the region can't be located, or OCR comes back empty, so a failure surfaces and
+    rolls the create back rather than persisting wrong or raw math.
     """
     doc = fitz.open(stream=_fetch_pdf(uri), filetype="pdf")
     if not 0 <= page_index < doc.page_count:
-        return exact
+        msg = f"PDF page {page_index} is out of range (0..{doc.page_count - 1})"
+        raise MathRecoveryError(msg)
     rect = _quote_rect(doc[page_index], exact)
     if rect is None:
-        return exact
+        msg = "PDF region could not be located for the quote"
+        raise MathRecoveryError(msg)
     png = doc[page_index].get_pixmap(dpi=_DPI, clip=rect).tobytes("png")
-    return _trim_to_quote(_ocr_latex(png), exact) or exact
+    latex = _trim_to_quote(_ocr_latex(png), exact)
+    if not latex:
+        msg = "OCR returned empty output for the PDF region"
+        raise MathRecoveryError(msg)
+    return latex

@@ -8,7 +8,9 @@
 // this must run in Node.
 //
 // Usage: node index.mjs <uri> <exact>   ->  prints the reconstructed quote, or empty when the
-// quote spans no math or can't be located (the worker then stores the raw quote unchanged).
+// page exposes no recoverable math source for the selection (the caller then falls back to
+// OCR of the rendered region). A hard failure (fetch/parse) exits non-zero so the caller
+// raises rather than storing raw.
 
 import katex from 'katex';
 import { parseHTML } from 'linkedom';
@@ -87,9 +89,9 @@ async function main() {
   return replaced ? out : '';
 }
 
-// Exit 0 with the reconstructed quote (empty = quote spans no math / not located: a
-// legitimate "nothing to do"). Exit 1 with the reason on stderr for a hard failure (page
-// fetch, parse) so the caller records it as a failure rather than a silent raw result.
+// Exit 0 with the reconstructed quote (empty = no recoverable math source: the caller falls
+// back to OCR). Exit 1 with the reason on stderr for a hard failure (page fetch, parse) so
+// the caller raises rather than storing a raw result.
 main()
   .then(out => process.stdout.write(out || ''))
   .catch(err => {

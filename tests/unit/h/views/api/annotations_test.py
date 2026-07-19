@@ -4,6 +4,7 @@ import pytest
 from pyramid.httpexceptions import HTTPNotFound
 from webob.multidict import MultiDict, NestedMultiDict
 
+from h.schemas import ValidationError
 from h.search.core import SearchResult
 from h.services.normalization import NormalizationService
 from h.traversal import AnnotationContext
@@ -123,6 +124,60 @@ class TestCreate:
     def test_it_raises_for_invalid_json(self, pyramid_request):
         with pytest.raises(PayloadError):
             views.create(pyramid_request)
+
+    @pytest.mark.usefixtures("annotation_json_service", "AnnotationEvent")
+    def test_it_normalizes_the_new_annotation_in_the_transaction(
+        self,
+        pyramid_request,
+        CreateAnnotationSchema,
+        annotation_write_service,
+        normalization_service,
+    ):
+        CreateAnnotationSchema.return_value.validate.return_value = {
+            "references": [],
+            "target_selectors": [{"type": "TextQuoteSelector", "exact": "the math"}],
+        }
+
+        views.create(pyramid_request)
+
+        # Normalization runs on the created annotation, inside the request transaction, so a
+        # failed recovery rolls the whole create back (proven in the functional tests).
+        normalization_service.normalize.assert_called_once_with(
+            annotation_write_service.create_annotation.return_value
+        )
+
+    def test_it_rejects_a_quote_less_top_level_create(
+        self,
+        pyramid_request,
+        CreateAnnotationSchema,
+        annotation_write_service,
+        normalization_service,
+    ):
+        CreateAnnotationSchema.return_value.validate.return_value = {
+            "references": [],
+            "target_selectors": [],
+        }
+
+        with pytest.raises(ValidationError):
+            views.create(pyramid_request)
+
+        annotation_write_service.create_annotation.assert_not_called()
+        normalization_service.normalize.assert_not_called()
+
+    @pytest.mark.usefixtures("annotation_json_service", "AnnotationEvent")
+    def test_it_allows_a_quote_less_reply(
+        self, pyramid_request, CreateAnnotationSchema, annotation_write_service
+    ):
+        CreateAnnotationSchema.return_value.validate.return_value = {
+            "references": ["parent_id"],
+            "target_selectors": [],
+        }
+
+        views.create(
+            pyramid_request
+        )  # a reply carries no selection; must not be rejected
+
+        annotation_write_service.create_annotation.assert_called_once()
 
     @pytest.fixture
     def pyramid_request(self, pyramid_request):
@@ -288,35 +343,9 @@ class TestReindex:
         assert result == {"id": context.annotation.id, "indexed": True}
 
 
-class TestNormalize:
-    def test_it_resets_reenqueues_and_presents(
-        self,
-        annotation_context,
-        pyramid_request,
-        normalization_service,
-        annotation_json_service,
-        annotation_tasks,
-    ):
-        result = views.normalize(annotation_context, pyramid_request)
-
-        normalization_service.reset.assert_called_once_with(
-            annotation_context.annotation
-        )
-        annotation_tasks.normalize_annotation.delay.assert_called_once_with(
-            annotation_context.annotation.id
-        )
-        annotation_json_service.present.assert_called_once_with(
-            annotation=annotation_context.annotation, user=pyramid_request.user
-        )
-        assert result == annotation_json_service.present.return_value
-
-    @pytest.fixture
-    def normalization_service(self, mock_service):
-        return mock_service(NormalizationService)
-
-    @pytest.fixture(autouse=True)
-    def annotation_tasks(self, patch):
-        return patch("h.views.api.annotations.annotation_tasks")
+@pytest.fixture(autouse=True)
+def normalization_service(mock_service):
+    return mock_service(NormalizationService)
 
 
 @pytest.fixture
