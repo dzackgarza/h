@@ -1,6 +1,8 @@
 import pytest
 
+from h.services.normalization import NormalizationService
 from h.tasks.annotations import (
+    normalize_annotation,
     publish_annotation_event_for_authority,
     sync_annotation_slim,
 )
@@ -60,6 +62,31 @@ class TestPublishAnnotationEventForAuthority:
         annotation_authority_queue_service.publish.assert_called_once_with(
             "create", "123"
         )
+
+
+class TestNormalizeAnnotation:
+    def test_it(self, annotation_read_service, normalization_service):
+        annotation = annotation_read_service.get_annotation_by_id.return_value
+
+        normalize_annotation("annotation_id")
+
+        annotation_read_service.get_annotation_by_id.assert_called_once_with(
+            "annotation_id"
+        )
+        normalization_service.normalize.assert_called_once_with(annotation)
+
+    def test_it_does_nothing_for_a_missing_annotation(
+        self, annotation_read_service, normalization_service
+    ):
+        annotation_read_service.get_annotation_by_id.return_value = None
+
+        normalize_annotation("missing")
+
+        normalization_service.normalize.assert_not_called()
+
+    @pytest.fixture
+    def normalization_service(self, mock_service):
+        return mock_service(NormalizationService)
 
 
 @pytest.fixture(autouse=True)

@@ -32,3 +32,8 @@ mail/
 !.yarn/releases
 !.yarn/sdks
 !.yarn/versions
+data/
+pre-volume-migration.sql
+
+# Bundled Node KaTeX normalizer deps (reproduce with `pnpm install` in that dir)
+h/scripts/html-normalize/node_modules/

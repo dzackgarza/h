@@ -1,7 +1,9 @@
 from h.db.types import URLSafeUUID
 from h.models import Annotation
 from h.services.annotation_authority_queue import AnnotationAuthorityQueueService
+from h.services.annotation_read import AnnotationReadService
 from h.services.annotation_write import AnnotationWriteService
+from h.services.normalization import NormalizationService
 from h.tasks.celery import celery, get_task_logger
 
 log = get_task_logger(__name__)
@@ -47,3 +49,19 @@ def publish_annotation_event_for_authority(event_action, annotation_id):
     celery.request.find_service(AnnotationAuthorityQueueService).publish(
         event_action, annotation_id
     )
+
+
+@celery.task
+def normalize_annotation(annotation_id):
+    """Enrich an annotation's flattened quote into its display-ready normalized row.
+
+    Runs after intake (off the annotation-create event), so the annotation and its anchoring
+    are never touched. This is the eager, event-triggered replacement for the standalone poll
+    worker: every annotation gets a row, so no view ever recomputes.
+    """
+    annotation = celery.request.find_service(
+        AnnotationReadService
+    ).get_annotation_by_id(annotation_id)
+    if annotation is None:
+        return
+    celery.request.find_service(NormalizationService).normalize(annotation)

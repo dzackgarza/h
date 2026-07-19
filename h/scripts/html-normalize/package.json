@@ -1,0 +1,6 @@
+{
+  "name": "html-normalize",
+  "private": true,
+  "type": "module",
+  "dependencies": { "katex": "^0.16.0", "linkedom": "^0.18.0" }
+}

@@ -56,3 +56,4 @@ wsaccel
 ws4py >= 0.4.0
 zope.interface
 requests
+pymupdf  # PDF render for math-region OCR (h.services.pdf_math); provides `fitz`
