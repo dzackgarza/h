@@ -80,6 +80,22 @@ class TestNormalize:
         assert row.method == "ocr"
         assert row in db_session
 
+    def test_mathless_pdf_annotation_is_its_own_normalized_quote(
+        self, svc, clean_pdf_quote, factories, db_session
+    ):
+        exact = "parameterizes the same surfaces, with finite data attached"
+        annotation = self.annotation(
+            factories, exact, "https://ex.com/paper.pdf", page=3
+        )
+
+        row = svc.normalize(annotation)
+        db_session.flush()
+
+        assert row.normalized_quote == exact
+        assert row.method == "identity"
+        assert row in db_session
+        clean_pdf_quote.assert_not_called()
+
     def test_pdf_recovery_failure_propagates_and_adds_no_row(
         self, svc, clean_pdf_quote, factories, db_session
     ):
