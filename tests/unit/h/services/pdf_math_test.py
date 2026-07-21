@@ -80,6 +80,55 @@ def test_quote_rect_is_none_when_the_selection_is_not_on_the_page():
     assert pdf_math._quote_rect(page, "text that does not appear here at all") is None  # noqa: SLF001
 
 
+def test_quote_rect_uses_context_when_the_exact_ends_are_truncated():
+    doc = _doc_with_lines(
+        [
+            (100, "Enriques surfaces are quotients of K3 surfaces by involutions."),
+            (120, "They satisfy 2K ~ 0 and occupy a place between other surfaces."),
+            (140, "In this paper we consider the moduli space of these surfaces."),
+        ]
+    )
+    page = doc[0]
+    exact = (
+        "s surfaces are quotients of K3 surfaces by involutions. "
+        "They satisfy 2K ~ 0 and occupy a place between other surfaces. "
+        "In this paper we con"
+    )
+
+    rect = pdf_math._quote_rect(  # noqa: SLF001
+        page,
+        exact,
+        prefix="Introduction Enriques",
+        suffix="sider the moduli space",
+    )
+
+    assert rect is not None
+    captured = page.get_textbox(rect)
+    assert "Enriques surfaces are quotients" in captured
+    assert "In this paper we consider" in captured
+
+
+def test_quote_rect_uses_prose_context_for_a_formula_only_exact_quote():
+    doc = _doc_with_lines(
+        [
+            (100, "On an affine subset a nonvanishing form is given by"),
+            (120, "omega equals the residue formula"),
+            (140, "One has the following identity"),
+        ]
+    )
+    page = doc[0]
+
+    rect = pdf_math._quote_rect(  # noqa: SLF001
+        page,
+        "omega=ResXdxdy",
+        prefix="a nonvanishing form is given by",
+        suffix="One has",
+    )
+
+    assert rect is not None
+    assert "omega equals the residue formula" in page.get_textbox(rect)
+
+
 def test_trim_to_quote_cuts_trailing_overcapture():
     # The crop is full column width, so its last line runs past the selection; the trailing
     # prose of the quote marks where to cut, and the math before it is preserved.
