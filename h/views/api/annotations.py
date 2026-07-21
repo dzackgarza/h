@@ -15,27 +15,21 @@ authorization system. You can find the mapping between annotation "permissions"
 objects and Pyramid ACLs in :mod:`h.traversal`.
 """
 
-from pyramid import i18n
 from pyramid.httpexceptions import HTTPNotFound
 
 from h import search as search_lib
 from h.events import AnnotationEvent
 from h.presenters import AnnotationJSONLDPresenter
-from h.schemas import ValidationError
 from h.schemas.annotation import (
     CreateAnnotationSchema,
     SearchParamsSchema,
     UpdateAnnotationSchema,
-    has_text_quote,
 )
 from h.schemas.util import validate_query_params
 from h.security import Permission
 from h.services import AnnotationWriteService, NormalizationService
 from h.views.api.config import api_config
 from h.views.api.helpers.json_payload import json_payload
-
-_ = i18n.TranslationStringFactory(__package__)
-
 
 @api_config(
     versions=["v1", "v2"],
@@ -81,16 +75,6 @@ def create(request):
     """Create an annotation from the POST payload."""
     schema = CreateAnnotationSchema(request)
     appstruct = schema.validate(json_payload(request))
-
-    # A top-level annotation must select text: there are no quote-less annotations (the old
-    # urn:annotate:marker session markers are gone), and math normalization needs a quote to
-    # recover. Replies legitimately carry no selection, so they are exempt.
-    if not appstruct["references"] and not has_text_quote(
-        appstruct.get("target_selectors")
-    ):
-        raise ValidationError(
-            _("An annotation must select some text (a TextQuoteSelector).")
-        )
 
     annotation = request.find_service(AnnotationWriteService).create_annotation(
         data=appstruct
