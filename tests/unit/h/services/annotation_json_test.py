@@ -81,15 +81,20 @@ class TestAnnotationJSONService:
         assert "normalization_status" not in result
         assert "normalization_error" not in result
 
-    def test_present_falls_back_to_the_raw_quote_for_a_legacy_rowless_annotation(
+    def test_present_surfaces_an_error_instead_of_raw_text_for_a_legacy_rowless_annotation(
         self, service, annotation
     ):
-        # Synchronous normalization gives every new annotation a row; only rows predating it
-        # are absent, and then the presenter shows the raw capture rather than crashing.
         result = service.present(annotation)
 
-        assert "normalization_status" not in result
-        assert result["normalized_quote"] == annotation.quote
+        assert result["normalized_quote"] == ""
+        assert result["normalization_error"] == {
+            "code": "math_normalization_missing",
+            "description": (
+                "This legacy annotation has no normalized quote. Run the normalization "
+                "reconciliation command and inspect its diagnostic before using the selection."
+            ),
+            "retryable": False,
+        }
 
     def test_present_with_metadata(self, service, annotation):
         data = {
