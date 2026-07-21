@@ -1,3 +1,5 @@
+from uuid import UUID
+
 import elasticsearch_dsl
 import pytest
 
@@ -509,6 +511,15 @@ class TestPostAnnotation:
         )
 
         assert res.status_code == 500
+        assert res.json["status"] == "failure"
+        assert res.json["code"] == "math_normalization_failed"
+        assert res.json["description"] == (
+            "The annotation was not saved because its selected math could not be "
+            "recovered. Check that the document is reachable, then retry."
+        )
+        assert res.json["reason"] == "boom"
+        assert res.json["retryable"] is True
+        UUID(res.json["diagnostic_id"])
         assert db_session.query(Annotation).count() == before
 
 
