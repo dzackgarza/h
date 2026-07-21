@@ -15,6 +15,7 @@ which rolls the create back so no annotation -- and no raw quote -- is ever pers
 
 from __future__ import annotations
 
+import base64
 import logging
 import subprocess
 import time
@@ -27,6 +28,7 @@ from h.models import Annotation, AnnotationNormalized
 from h.models.document import DocumentURI
 from h.services.pdf_math import (
     MathRecoveryError,
+    _ocr_latex,
     clean_pdf_quote,
     pdf_has_math,
     recovery_timeout,
@@ -36,6 +38,9 @@ log = logging.getLogger(__name__)
 
 _HTML_NORMALIZE = (
     Path(__file__).resolve().parents[1] / "scripts" / "html-normalize" / "index.mjs"
+)
+_HTML_RENDER = (
+    Path(__file__).resolve().parents[1] / "scripts" / "html-normalize" / "ocr.mjs"
 )
 
 
@@ -83,6 +88,36 @@ def _html_source_extract(uri: str, exact: str) -> str:
         msg = f"html-normalize failed: {reason}"
         raise MathRecoveryError(msg)
     return result.stdout.strip()
+
+
+def _render_html_quote(uri: str, exact: str) -> bytes:
+    """Render the selected HTML range in headless Chromium and return its PNG."""
+    try:
+        result = subprocess.run(  # noqa: S603 - fixed script path, args are data
+            [
+                "node",
+                str(_HTML_RENDER),
+                uri,
+                exact,
+                str(int(recovery_timeout() * 1000)),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=recovery_timeout() + 5,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        msg = f"HTML rendered-region capture failed: {exc}"
+        raise MathRecoveryError(msg) from exc
+    if result.returncode != 0:
+        reason = result.stderr.strip()[:500] or f"exit {result.returncode}"
+        msg = f"HTML rendered-region capture failed: {reason}"
+        raise MathRecoveryError(msg)
+    try:
+        return base64.b64decode(result.stdout, validate=True)
+    except ValueError as exc:
+        msg = "HTML rendered-region capture returned invalid PNG data"
+        raise MathRecoveryError(msg) from exc
 
 
 class NormalizationService:
@@ -194,19 +229,13 @@ class NormalizationService:
             return (source, "html")
         return (self._ocr_html_region(uri, quote), "ocr")
 
-    def _ocr_html_region(self, uri: str, quote: str) -> str:  # noqa: ARG002
-        """OCR a source-less HTML selection's rendered pixels -- an undecided sub-decision.
-
-        LaTeXML/Pandoc HTML exposes math source, so it takes the source path above; a
-        source-less HTML page is rare. The pixel source for this fallback (client screenshot
-        vs. backend headless render) is not yet decided, so rather than degrade to raw this
-        raises -- keeping the never-raw invariant absolute until the mechanism is chosen.
-        """
-        msg = (
-            "source-less HTML OCR fallback is not yet available: the pixel source "
-            "(client screenshot vs. backend headless render) is an undecided sub-decision"
-        )
-        raise MathRecoveryError(msg)
+    def _ocr_html_region(self, uri: str, quote: str) -> str:
+        """OCR a source-less HTML selection from a backend Chromium rendering."""
+        recovered = _ocr_latex(_render_html_quote(uri, quote))
+        if not recovered:
+            msg = "OCR returned empty output for the rendered HTML selection"
+            raise MathRecoveryError(msg)
+        return recovered
 
     def _resolve_pdf_url(self, uri: str) -> str | None:
         """Resolve a PDF annotation's document to a fetchable http(s) URL, or ``None``.
