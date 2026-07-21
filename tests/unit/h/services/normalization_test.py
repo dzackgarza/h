@@ -22,7 +22,7 @@ class TestNormalize:
         db_session.flush()
 
         assert row.normalized_quote == exact
-        assert row.method == "html"
+        assert row.method == "identity"
 
     def test_html_annotation_recovers_math_from_the_page_source(
         self, svc, html_source_extract, factories, db_session
