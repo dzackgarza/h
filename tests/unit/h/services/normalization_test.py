@@ -33,6 +33,25 @@ class TestNormalize:
         assert missing.normalized.method == "identity"
         assert existing.normalized.method == "identity"
 
+    def test_reconcile_missing_commits_recoverable_rows_and_reports_failures(
+        self, svc, html_source_extract, factories, db_session
+    ):
+        failed = self.annotation(factories, "unrecoverable math", "https://ex.com/a")
+        recovered = self.annotation(factories, "plain existing prose", "https://ex.com/b")
+        db_session.flush()
+        html_source_extract.side_effect = [
+            MathRecoveryError("source unavailable"),
+            "plain existing prose",
+        ]
+
+        result = svc.reconcile_missing()
+        db_session.flush()
+
+        assert result.normalized == 1
+        assert result.failures == [(failed.id, "source unavailable")]
+        assert failed.normalized is None
+        assert recovered.normalized.method == "identity"
+
     def test_mathless_html_annotation_is_its_own_normalized_quote(
         self, svc, factories, db_session
     ):
