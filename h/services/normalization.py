@@ -63,6 +63,13 @@ def _page_index(annotation: Annotation) -> int | None:
     return None
 
 
+def _quote_context(annotation: Annotation) -> tuple[str, str]:
+    for selector in annotation.target_selectors or []:
+        if isinstance(selector, dict) and selector.get("type") == "TextQuoteSelector":
+            return (selector.get("prefix", ""), selector.get("suffix", ""))
+    return ("", "")
+
+
 def _html_source_extract(uri: str, exact: str) -> str:
     r"""Extract the selection's math from the page's own source via the Node (KaTeX) script.
 
@@ -209,16 +216,19 @@ class NormalizationService:
         if page is not None:  # PDF annotation
             if not pdf_has_math(quote):
                 return (quote, "identity")
-            return (self._recover_pdf(uri, page, quote), "ocr")
+            return (self._recover_pdf(annotation, uri, page, quote), "ocr")
         return self._recover_html(uri, quote)
 
-    def _recover_pdf(self, uri: str, page: int, quote: str) -> str:
+    def _recover_pdf(
+        self, annotation: Annotation, uri: str, page: int, quote: str
+    ) -> str:
         """OCR a PDF region into LaTeX, or raise if the PDF URL can't be resolved."""
         url = self._resolve_pdf_url(uri)
         if not url:
             msg = f"could not resolve a fetchable PDF URL for {uri!r}"
             raise MathRecoveryError(msg)
-        return clean_pdf_quote(url, page, quote)
+        prefix, suffix = _quote_context(annotation)
+        return clean_pdf_quote(url, page, quote, prefix=prefix, suffix=suffix)
 
     def _recover_html(self, uri: str, quote: str) -> tuple[str, str]:
         """Reconstruct HTML math from the page source; fall back to OCR of the region."""

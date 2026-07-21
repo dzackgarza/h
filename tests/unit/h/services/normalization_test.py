@@ -125,11 +125,20 @@ class TestNormalize:
         annotation = self.annotation(
             factories, "2K ∼ 0", "https://ex.com/paper.pdf", page=3
         )
+        annotation.target_selectors[0].update(
+            {"prefix": "They satisfy", "suffix": "and continue"}
+        )
 
         row = svc.normalize(annotation)
         db_session.flush()
 
-        clean_pdf_quote.assert_called_once_with("https://ex.com/paper.pdf", 3, "2K ∼ 0")
+        clean_pdf_quote.assert_called_once_with(
+            "https://ex.com/paper.pdf",
+            3,
+            "2K ∼ 0",
+            prefix="They satisfy",
+            suffix="and continue",
+        )
         assert row.normalized_quote == r"2K $\sim$ 0"
         assert row.method == "ocr"
         assert row in db_session

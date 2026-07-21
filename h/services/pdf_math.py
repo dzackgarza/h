@@ -69,18 +69,36 @@ def _norm(text: str) -> str:
     return re.sub(r"[^a-z0-9]", "", text.lower())
 
 
-def _match_end(forms: list[str], ngram: list[str]) -> int | None:
-    """Index of the final word of the last contiguous occurrence of ``ngram`` in ``forms``."""
-    needle = [w for w in ngram if w]
-    if not needle:
+def _projected_bounds(forms: list[str], words: list[str]) -> tuple[int, int] | None:
+    """Project a possibly truncated token sequence onto page-word indexes."""
+    if not words:
         return None
-    for i in range(len(forms) - len(needle), -1, -1):
-        if forms[i : i + len(needle)] == needle:
-            return i + len(needle) - 1
-    return None
+
+    def anchor(window_start: int, window_end: int, project_end: bool) -> int | None:
+        window = words[window_start:window_end]
+        for size in range(min(6, len(window)), 0, -1):
+            for offset in range(0, len(window) - size + 1):
+                needle = window[offset : offset + size]
+                for page_start in range(0, len(forms) - size + 1):
+                    if forms[page_start : page_start + size] != needle:
+                        continue
+                    word_offset = window_start + offset
+                    if project_end:
+                        return page_start + size - 1 + len(words) - (word_offset + size)
+                    return page_start - word_offset
+        return None
+
+    edge = min(10, len(words))
+    start = anchor(0, edge, project_end=False)
+    end = anchor(len(words) - edge, len(words), project_end=True)
+    if start is None or end is None:
+        return None
+    return (max(0, start), min(len(forms) - 1, end))
 
 
-def _quote_rect(page: fitz.Page, exact: str) -> fitz.Rect | None:
+def _quote_rect(
+    page: fitz.Page, exact: str, prefix: str = "", suffix: str = ""
+) -> fitz.Rect | None:
     """Locate the annotated text's bounding box on ``page`` -- every line, at column width.
 
     Located from the quote's own words: its prose anchors the two ends (the math between
@@ -95,27 +113,19 @@ def _quote_rect(page: fitz.Page, exact: str) -> fitz.Rect | None:
     qwords = [w for w in (_norm(t) for t in exact.split()) if w]
     if not entries or not qwords:
         return None
-    # Bottom anchor: the quote's last prose words (math rarely sits at the very tail).
-    end = next(
-        (e for k in (4, 3, 2, 1) if (e := _match_end(forms, qwords[-k:])) is not None),
-        None,
-    )
-    if end is None:
-        return None
-    # Top anchor: the earliest quote word that occurs at or before the tail. When it repeats
-    # (both across the page and *within* the quote, e.g. "Enriques ... Enriques"), pick the
-    # occurrence nearest where the start should fall given the tail and the quote's length --
-    # the run of page words a contiguous selection covers is ~its word count.
-    target = end - (len(qwords) - 1)
-    start = next(
-        (
-            min(cands, key=lambda i: abs(i - target))
-            for q in qwords[:8]
-            if (cands := [i for i, w in enumerate(forms) if w == q and i <= end])
-        ),
-        None,
-    )
-    if start is None or start > end:
+    bounds = _projected_bounds(forms, qwords)
+    if bounds is None:
+        prefix_words = [w for w in (_norm(t) for t in prefix.split()) if w]
+        suffix_words = [w for w in (_norm(t) for t in suffix.split()) if w]
+        prefix_bounds = _projected_bounds(forms, prefix_words)
+        suffix_bounds = _projected_bounds(forms, suffix_words)
+        if prefix_bounds is None or suffix_bounds is None:
+            return None
+        start = prefix_bounds[1] + 1
+        end = suffix_bounds[0] - 1
+    else:
+        start, end = bounds
+    if start > end:
         return None
     rects = [entries[i][1] for i in range(start, end + 1)]
     pad = 2.0
@@ -198,7 +208,9 @@ def _fetch_pdf(uri: str) -> bytes:
     return _pdf_cache[uri]
 
 
-def clean_pdf_quote(uri: str, page_index: int, exact: str) -> str:
+def clean_pdf_quote(
+    uri: str, page_index: int, exact: str, prefix: str = "", suffix: str = ""
+) -> str:
     """Recover clean LaTeX for a PDF annotation by OCR'ing the region it occupies.
 
     The region is the bounding box of ``exact`` located from the page's own words. Raises
@@ -214,7 +226,7 @@ def clean_pdf_quote(uri: str, page_index: int, exact: str) -> str:
     if not 0 <= page_index < doc.page_count:
         msg = f"PDF page {page_index} is out of range (0..{doc.page_count - 1})"
         raise MathRecoveryError(msg)
-    rect = _quote_rect(doc[page_index], exact)
+    rect = _quote_rect(doc[page_index], exact, prefix=prefix, suffix=suffix)
     if rect is None:
         msg = "PDF region could not be located for the quote"
         raise MathRecoveryError(msg)
