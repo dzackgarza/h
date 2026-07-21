@@ -41,6 +41,9 @@ class TestReindexCommand:
 
         assert result.exit_code == 0
         batch_indexer.index.assert_called_once_with(None)
+        pyramid_request.es.conn.indices.refresh.assert_called_once_with(
+            index=pyramid_request.es.index
+        )
         assert result.output == "reindexed every annotation\n"
 
     def test_reports_failed_annotation_ids(
