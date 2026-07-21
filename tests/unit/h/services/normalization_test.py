@@ -1,5 +1,6 @@
 from unittest import mock
 from unittest.mock import sentinel
+from urllib.parse import quote
 
 import pytest
 
@@ -9,6 +10,20 @@ from h.services.pdf_math import MathRecoveryError
 
 
 class TestNormalize:
+    def test_mathless_html_annotation_is_its_own_normalized_quote(
+        self, svc, factories, db_session
+    ):
+        exact = "A higher category is modeled by a quasicategory"
+        html = f"<html><body><main><p>{exact}</p></main></body></html>"
+        uri = f"data:text/html,{quote(html)}"
+        annotation = self.annotation(factories, exact, uri)
+
+        row = svc.normalize(annotation)
+        db_session.flush()
+
+        assert row.normalized_quote == exact
+        assert row.method == "html"
+
     def test_html_annotation_recovers_math_from_the_page_source(
         self, svc, html_source_extract, factories, db_session
     ):
