@@ -1,3 +1,4 @@
+from datetime import datetime
 from unittest import mock
 from unittest.mock import sentinel
 from urllib.parse import quote
@@ -37,7 +38,9 @@ class TestNormalize:
         self, svc, html_source_extract, factories, db_session
     ):
         failed = self.annotation(factories, "unrecoverable math", "https://ex.com/a")
+        failed.created = datetime(2026, 1, 1)
         recovered = self.annotation(factories, "plain existing prose", "https://ex.com/b")
+        recovered.created = datetime(2026, 1, 2)
         db_session.flush()
         html_source_extract.side_effect = [
             MathRecoveryError("source unavailable"),

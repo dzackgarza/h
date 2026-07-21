@@ -9,6 +9,12 @@ from h.services import NormalizationService
 def normalize_annotations(ctx, limit):
     """Backfill display-ready quotes for annotations created before normalization."""
     request = ctx.obj["bootstrap"]()
-    count = request.find_service(NormalizationService).normalize_missing(limit=limit)
+    result = request.find_service(NormalizationService).reconcile_missing(limit=limit)
     request.tm.commit()
-    click.echo(f"normalized {count} existing annotation(s)")
+    click.echo(f"normalized {result.normalized} existing annotation(s)")
+    if result.failures:
+        for annotation_id, reason in result.failures:
+            click.echo(f"failed\t{annotation_id}\t{reason}", err=True)
+        raise click.ClickException(
+            f"{len(result.failures)} annotation(s) remain without normalized quotes"
+        )

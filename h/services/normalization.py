@@ -18,6 +18,7 @@ from __future__ import annotations
 import logging
 import subprocess
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
 from sqlalchemy import orm, select
@@ -36,6 +37,12 @@ log = logging.getLogger(__name__)
 _HTML_NORMALIZE = (
     Path(__file__).resolve().parents[1] / "scripts" / "html-normalize" / "index.mjs"
 )
+
+
+@dataclass(frozen=True)
+class ReconciliationResult:
+    normalized: int
+    failures: list[tuple[str, str]]
 
 
 def _page_index(annotation: Annotation) -> int | None:
@@ -128,6 +135,28 @@ class NormalizationService:
         normalization moved into ``h``. A recovery failure is not downgraded or skipped: it
         aborts the caller's transaction with the same ``MathRecoveryError`` as a new create.
         """
+        normalized = 0
+        for annotation in self._missing_annotations(limit):
+            if self.normalize(annotation) is not None:
+                normalized += 1
+        return normalized
+
+    def reconcile_missing(self, limit: int | None = None) -> ReconciliationResult:
+        """Normalize every recoverable old row and report each unrecoverable residue."""
+        normalized = 0
+        failures = []
+        for annotation in self._missing_annotations(limit):
+            try:
+                with self._session.begin_nested():
+                    row = self.normalize(annotation)
+            except MathRecoveryError as exc:
+                failures.append((annotation.id, str(exc)))
+            else:
+                if row is not None:
+                    normalized += 1
+        return ReconciliationResult(normalized=normalized, failures=failures)
+
+    def _missing_annotations(self, limit: int | None):
         statement = (
             select(Annotation)
             .outerjoin(AnnotationNormalized)
@@ -136,12 +165,7 @@ class NormalizationService:
         )
         if limit is not None:
             statement = statement.limit(limit)
-
-        normalized = 0
-        for annotation in self._session.scalars(statement):
-            if self.normalize(annotation) is not None:
-                normalized += 1
-        return normalized
+        return self._session.scalars(statement)
 
     def _recover(self, annotation: Annotation, quote: str) -> tuple[str, str]:
         """Recover ``(normalized_quote, method)`` for a quote-bearing annotation, or raise."""
