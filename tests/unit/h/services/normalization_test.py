@@ -10,6 +10,29 @@ from h.services.pdf_math import MathRecoveryError
 
 
 class TestNormalize:
+    def test_normalize_missing_backfills_only_quote_bearing_rows_without_one(
+        self, svc, html_source_extract, factories, db_session
+    ):
+        html_source_extract.side_effect = lambda _uri, exact: exact
+        missing = self.annotation(factories, "plain existing prose", "https://ex.com/a")
+        existing = self.annotation(factories, "already normalized", "https://ex.com/b")
+        factories.AnnotationNormalized(
+            annotation=existing,
+            normalized_quote="already normalized",
+            method="identity",
+        )
+        factories.Annotation(
+            target_uri="https://ex.com/reply", target_selectors=[]
+        )
+        db_session.flush()
+
+        assert svc.normalize_missing() == 1
+        db_session.flush()
+
+        assert missing.normalized.normalized_quote == "plain existing prose"
+        assert missing.normalized.method == "identity"
+        assert existing.normalized.method == "identity"
+
     def test_mathless_html_annotation_is_its_own_normalized_quote(
         self, svc, factories, db_session
     ):
