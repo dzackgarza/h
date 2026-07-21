@@ -59,10 +59,15 @@ class TestAnnotationJSONService:
             "flagged": flag_service.flagged.return_value,
             "moderation": {"flagCount": flag_service.flag_count.return_value},
             "actions": ["moderate"],
-            "normalized_quote": (
-                "If you wish to install Hypothesis on your own site then head "
-                "over to GitHub."
-            ),
+            "normalized_quote": "",
+            "normalization_error": {
+                "code": "math_normalization_missing",
+                "description": (
+                    "This legacy annotation has no normalized quote. Run the normalization "
+                    "reconciliation command and inspect its diagnostic before using the selection."
+                ),
+                "retryable": False,
+            },
         }
 
         DocumentJSONPresenter.assert_called_once_with(annotation.document)

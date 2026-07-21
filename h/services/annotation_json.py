@@ -91,16 +91,22 @@ class AnnotationJSONService:
             }
         )
 
-        # The display-ready quote: the selection with rendered math recovered (see the
-        # AnnotationNormalized model). Created synchronously in the same transaction as the
-        # annotation, so a stored annotation always has one and never shows the raw capture.
-        # The raw fallback only covers legacy rows predating synchronous normalization.
+        # The display-ready quote is created synchronously with new annotations. Legacy
+        # highlights without a normalization row must remain visibly unusable: returning the
+        # flattened selector text would silently substitute a different mathematical value.
         normalized = annotation.normalized
         model["normalized_quote"] = (
-            normalized.normalized_quote
-            if normalized is not None
-            else self._raw_quote(annotation)
+            normalized.normalized_quote if normalized is not None else ""
         )
+        if normalized is None and annotation.quote:
+            model["normalization_error"] = {
+                "code": "math_normalization_missing",
+                "description": (
+                    "This legacy annotation has no normalized quote. Run the normalization "
+                    "reconciliation command and inspect its diagnostic before using the selection."
+                ),
+                "retryable": False,
+            }
 
         author = self._user_service.fetch(annotation.userid)
         model["mentions"] = [
@@ -208,19 +214,6 @@ class AnnotationJSONService:
             return ModerationStatus.APPROVED.value
 
         return annotation.moderation_status.value
-
-    @staticmethod
-    def _raw_quote(annotation) -> str:
-        """Read the selection's raw text-layer / DOM quote from its TextQuoteSelector.
-
-        This is the fallback shown until enrichment has produced a normalized quote.
-        """
-        for target in annotation.target or []:
-            for selector in target.get("selector") or []:
-                if selector.get("type") == "TextQuoteSelector":
-                    return selector.get("exact", "")
-        return ""
-
 
 def factory(_context, request):
     return AnnotationJSONService(
