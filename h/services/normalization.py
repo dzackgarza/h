@@ -143,6 +143,8 @@ class NormalizationService:
         """Reconstruct HTML math from the page source; fall back to OCR of the region."""
         source = _html_source_extract(uri, quote)
         if source:
+            if source == quote:
+                return (quote, "identity")
             return (source, "html")
         return (self._ocr_html_region(uri, quote), "ocr")
 
