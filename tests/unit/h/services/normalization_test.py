@@ -69,13 +69,13 @@ class TestNormalize:
     def test_pdf_annotation_is_ocred(self, svc, clean_pdf_quote, factories, db_session):
         clean_pdf_quote.return_value = r"2K $\sim$ 0"
         annotation = self.annotation(
-            factories, "2K ~ 0", "https://ex.com/paper.pdf", page=3
+            factories, "2K ∼ 0", "https://ex.com/paper.pdf", page=3
         )
 
         row = svc.normalize(annotation)
         db_session.flush()
 
-        clean_pdf_quote.assert_called_once_with("https://ex.com/paper.pdf", 3, "2K ~ 0")
+        clean_pdf_quote.assert_called_once_with("https://ex.com/paper.pdf", 3, "2K ∼ 0")
         assert row.normalized_quote == r"2K $\sim$ 0"
         assert row.method == "ocr"
         assert row in db_session
@@ -101,7 +101,7 @@ class TestNormalize:
     ):
         clean_pdf_quote.side_effect = MathRecoveryError("OCR returned empty output")
         annotation = self.annotation(
-            factories, "2K ~ 0", "https://ex.com/paper.pdf", page=1
+            factories, "2K ∼ 0", "https://ex.com/paper.pdf", page=1
         )
 
         with pytest.raises(MathRecoveryError, match="empty output"):
@@ -112,7 +112,7 @@ class TestNormalize:
     def test_a_pdf_whose_url_cannot_be_resolved_raises(
         self, svc, factories, db_session
     ):
-        annotation = self.annotation(factories, "2K ~ 0", "urn:x-pdf:NOSUCHDOC", page=0)
+        annotation = self.annotation(factories, "2K ∼ 0", "urn:x-pdf:NOSUCHDOC", page=0)
 
         with pytest.raises(MathRecoveryError, match="resolve a fetchable PDF URL"):
             svc.normalize(annotation)
@@ -137,7 +137,7 @@ class TestNormalize:
     ):
         clean_pdf_quote.side_effect = MathRecoveryError("OCR returned empty output")
         annotation = self.annotation(
-            factories, "2K ~ 0", "https://ex.com/paper.pdf", page=1
+            factories, "2K ∼ 0", "https://ex.com/paper.pdf", page=1
         )
 
         with caplog.at_level("WARNING", logger="h.services.normalization"):  # noqa: SIM117

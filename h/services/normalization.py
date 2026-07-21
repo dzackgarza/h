@@ -24,7 +24,12 @@ from sqlalchemy import orm, select
 
 from h.models import Annotation, AnnotationNormalized
 from h.models.document import DocumentURI
-from h.services.pdf_math import MathRecoveryError, clean_pdf_quote, recovery_timeout
+from h.services.pdf_math import (
+    MathRecoveryError,
+    clean_pdf_quote,
+    pdf_has_math,
+    recovery_timeout,
+)
 
 log = logging.getLogger(__name__)
 
@@ -121,6 +126,8 @@ class NormalizationService:
         uri = annotation.target_uri or ""
         page = _page_index(annotation)
         if page is not None:  # PDF annotation
+            if not pdf_has_math(quote):
+                return (quote, "identity")
             return (self._recover_pdf(uri, page, quote), "ocr")
         return self._recover_html(uri, quote)
 

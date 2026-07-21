@@ -40,9 +40,10 @@ class AnnotationNormalized(Base, Timestamps):
     selection spans no math."""
 
     method: Mapped[str] = mapped_column(sa.UnicodeText, nullable=False)
-    """How it was produced: ``html`` (recovered from the page's math source) or ``ocr``
-    (Mathpix on a rendered region). Never ``raw`` -- a genuine recovery failure raises and
-    rolls the create back, so no row is ever written for it."""
+    """How it was produced: ``identity`` (math-less text kept verbatim), ``html``
+    (recovered from the page's math source), or ``ocr`` (Mathpix on a rendered region).
+    Never ``raw`` -- a genuine recovery failure raises and rolls the create back, so no row
+    is ever written for it."""
 
     def __repr__(self) -> str:
         return helpers.repr_(self, ["id", "annotation_id", "method"])
