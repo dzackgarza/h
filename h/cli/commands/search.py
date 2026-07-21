@@ -1,6 +1,7 @@
 import click
 
 from h.search import config
+from h.search.index import BatchIndexer
 
 
 @click.group()
@@ -24,3 +25,20 @@ def update_settings(ctx):
         config.update_index_settings(request.es)
     except RuntimeError as exc:
         raise click.ClickException(str(exc))  # noqa: B904
+
+
+@search.command("reindex")
+@click.pass_context
+def reindex(ctx):
+    """Reindex every non-deleted annotation from PostgreSQL into Elasticsearch."""
+    request = ctx.obj["bootstrap"]()
+    errored_ids = BatchIndexer(request.db, request.es, request).index(None)
+
+    if errored_ids:
+        for annotation_id in sorted(errored_ids):
+            click.echo(f"failed\t{annotation_id}", err=True)
+        raise click.ClickException(
+            f"{len(errored_ids)} annotation(s) failed to reindex"
+        )
+
+    click.echo("reindexed every annotation")

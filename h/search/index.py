@@ -30,7 +30,9 @@ class BatchIndexer:
         else:
             self._target_index = target_index
 
-    def index(self, annotation_ids: list, windowsize: int = PG_WINDOW_SIZE):
+    def index(
+        self, annotation_ids: list | None, windowsize: int = PG_WINDOW_SIZE
+    ) -> set[str]:
         """
         Reindex annotations.
 
@@ -127,13 +129,14 @@ class BatchIndexer:
         return self.es_client.server_version < Version("7.0.0")
 
 
-def _filtered_annotations(session, ids):
+def _filtered_annotations(session, ids: list | None):
     annotations = (
         _eager_loaded_annotations(session)
         .execution_options(stream_results=True)
         .filter(_annotation_filter())
-        .filter(models.Annotation.id.in_(ids))
     )
+    if ids is not None:
+        annotations = annotations.filter(models.Annotation.id.in_(ids))
 
     yield from annotations
 
