@@ -9,9 +9,9 @@
 // not), which is why this must run in Node; it is not the render target.
 //
 // Usage: node index.mjs <uri> <exact>   ->  prints the reconstructed quote, or empty when the
-// page exposes no recoverable math source for the selection (the caller then falls back to
-// OCR of the rendered region). A hard failure (fetch/parse) exits non-zero so the caller
-// raises rather than storing raw.
+// selection cannot be located in the page (the caller then falls back to OCR of the rendered
+// region). A hard failure (fetch/parse) exits non-zero so the caller raises rather than storing
+// raw. A located quote containing no math is returned unchanged.
 
 import katex from 'katex';
 import { parseHTML } from 'linkedom';
@@ -77,22 +77,20 @@ async function main() {
   if (at < 0) return '';
   const end = at + needle.length;
   let out = '';
-  let replaced = false;
   for (const seg of segments) {
     if (seg.end <= at || seg.start >= end) continue;
     if (seg.math !== undefined) {
       out += seg.math;
-      replaced = true;
     } else {
       out += rendered.slice(Math.max(seg.start, at), Math.min(seg.end, end));
     }
   }
-  return replaced ? out : '';
+  return out;
 }
 
-// Exit 0 with the reconstructed quote (empty = no recoverable math source: the caller falls
-// back to OCR). Exit 1 with the reason on stderr for a hard failure (page fetch, parse) so
-// the caller raises rather than storing a raw result.
+// Exit 0 with the reconstructed quote (empty = selection not found, so the caller falls back
+// to OCR). Exit 1 with the reason on stderr for a hard failure (page fetch, parse) so the caller
+// raises rather than storing a raw result.
 main()
   .then(out => process.stdout.write(out || ''))
   .catch(err => {
