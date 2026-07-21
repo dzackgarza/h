@@ -448,17 +448,20 @@ class TestPostAnnotation:
         assert res.status_code == 400
         assert res.json["reason"].startswith("group:")
 
-    def test_it_rejects_a_quote_less_top_level_create(self, app, user_with_token):
+    def test_it_creates_a_page_note_without_normalization(
+        self, app, db_session, user_with_token
+    ):
         _, token = user_with_token
         headers = {"Authorization": f"Bearer {token.value}"}
         annotation = {"group": "__world__", "text": "note", "uri": "http://example.com"}
 
-        res = app.post_json(
-            "/api/annotations", annotation, headers=headers, expect_errors=True
-        )
+        res = app.post_json("/api/annotations", annotation, headers=headers)
 
-        assert res.status_code == 400
-        assert "TextQuoteSelector" in res.json["reason"]
+        assert res.status_code == 200
+        assert res.json["text"] == "note"
+        created = db_session.get(Annotation, res.json["id"])
+        assert created is not None
+        assert created.normalized is None
 
     # TODO: This endpoint should return a 201  # noqa: FIX002, TD002, TD003
     def test_it_returns_the_normalized_quote_when_created(
