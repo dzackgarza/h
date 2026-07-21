@@ -121,6 +121,28 @@ class NormalizationService:
         self._session.add(row)
         return row
 
+    def normalize_missing(self, limit: int | None = None) -> int:
+        """Normalize existing quote-bearing annotations that have no normalized row.
+
+        This is the reconciliation path for annotations created before synchronous
+        normalization moved into ``h``. A recovery failure is not downgraded or skipped: it
+        aborts the caller's transaction with the same ``MathRecoveryError`` as a new create.
+        """
+        statement = (
+            select(Annotation)
+            .outerjoin(AnnotationNormalized)
+            .where(AnnotationNormalized.id.is_(None))
+            .order_by(Annotation.created)
+        )
+        if limit is not None:
+            statement = statement.limit(limit)
+
+        normalized = 0
+        for annotation in self._session.scalars(statement):
+            if self.normalize(annotation) is not None:
+                normalized += 1
+        return normalized
+
     def _recover(self, annotation: Annotation, quote: str) -> tuple[str, str]:
         """Recover ``(normalized_quote, method)`` for a quote-bearing annotation, or raise."""
         uri = annotation.target_uri or ""

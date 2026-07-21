@@ -9,7 +9,7 @@ from h.services import NormalizationService
 def test_command_reconciles_missing_normalized_quotes(cli, cliconfig, pyramid_request):
     service = mock.Mock()
     service.normalize_missing.return_value = 3
-    pyramid_request.find_service.return_value = service
+    pyramid_request.find_service = mock.Mock(return_value=service)
 
     result = cli.invoke(
         normalize_annotations_cli.normalize_annotations,
