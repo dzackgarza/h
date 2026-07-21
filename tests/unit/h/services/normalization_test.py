@@ -85,18 +85,27 @@ class TestNormalize:
         assert row.method == "html"
         assert row in db_session
 
-    def test_source_less_html_falls_back_to_ocr_and_raises_until_it_exists(
-        self, svc, html_source_extract, factories, db_session
+    def test_source_less_html_falls_back_to_rendered_region_ocr(
+        self,
+        svc,
+        html_source_extract,
+        render_html_quote,
+        ocr_latex,
+        factories,
+        db_session,
     ):
-        # No recoverable page source -> OCR fallback; its pixel source is an undecided
-        # sub-decision, so it raises rather than degrading to raw. No row is added.
-        html_source_extract.return_value = ""  # ran clean, found no math source
+        html_source_extract.return_value = ""
+        render_html_quote.return_value = b"rendered selection PNG"
+        ocr_latex.return_value = r"the space $\mathcal{M}$ here"
         annotation = self.annotation(factories, "the space M here", "https://ex.com/p")
 
-        with pytest.raises(MathRecoveryError, match="source-less HTML"):
-            svc.normalize(annotation)
+        row = svc.normalize(annotation)
+        db_session.flush()
 
-        assert self.rows(db_session, annotation) == 0
+        render_html_quote.assert_called_once_with("https://ex.com/p", "the space M here")
+        ocr_latex.assert_called_once_with(b"rendered selection PNG")
+        assert row.normalized_quote == r"the space $\mathcal{M}$ here"
+        assert row.method == "ocr"
 
     def test_html_subprocess_failure_propagates_and_adds_no_row(
         self, svc, html_source_extract, factories, db_session
@@ -227,6 +236,14 @@ class TestNormalize:
     @pytest.fixture
     def clean_pdf_quote(self, patch):
         return patch("h.services.normalization.clean_pdf_quote")
+
+    @pytest.fixture
+    def render_html_quote(self, patch):
+        return patch("h.services.normalization._render_html_quote")
+
+    @pytest.fixture
+    def ocr_latex(self, patch):
+        return patch("h.services.normalization._ocr_latex")
 
 
 class TestResolvePdfUrl:
