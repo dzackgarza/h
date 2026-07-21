@@ -33,6 +33,7 @@ def reindex(ctx):
     """Reindex every non-deleted annotation from PostgreSQL into Elasticsearch."""
     request = ctx.obj["bootstrap"]()
     errored_ids = BatchIndexer(request.db, request.es, request).index(None)
+    request.es.conn.indices.refresh(index=request.es.index)
 
     if errored_ids:
         for annotation_id in sorted(errored_ids):
