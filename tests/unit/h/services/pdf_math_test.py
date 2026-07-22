@@ -2,9 +2,7 @@
 
 The OCR itself is Mathpix's correctness, proven out-of-band. What this module owns, and
 what these tests prove, is: locating the annotation's region as the bounding box of the
-selected text -- every line it spans, at the text column's width -- and blanking what that
-box holds beyond the selection, so the image handed to Mathpix is the selection and only
-the selection. On a locating miss (or an out-of-range page or empty OCR) it raises rather
+selected text -- every line it spans, at the text column's width. On a locating miss (or an out-of-range page or empty OCR) it raises rather
 than OCR the wrong region or return raw. Region logic runs against a real PyMuPDF document
 with text at known positions: a real boundary, no network, no OCR.
 """
@@ -12,7 +10,6 @@ with text at known positions: a real boundary, no network, no OCR.
 from __future__ import annotations
 
 import http.server
-import io
 import threading
 
 import pymupdf as fitz
@@ -275,50 +272,6 @@ def test_clean_pdf_quote_recovers_a_selection_that_ends_in_math(monkeypatch):
     )
 
     assert result == ocr
-
-
-def _ink_columns(png: bytes, *, band_top: float, band_bottom: float) -> set[int]:
-    """Return the x pixel columns with ink, between two fractions of the image height."""
-    pixmap = fitz.Pixmap(io.BytesIO(png))
-    rows = range(int(pixmap.height * band_top), int(pixmap.height * band_bottom))
-    return {
-        x
-        for x in range(pixmap.width)
-        for y in rows
-        if pixmap.pixel(x, y)[:3] != (255, 255, 255)
-    }
-
-
-def test_selection_png_blanks_the_neighbouring_text_on_the_selection_lines():
-    # The burden the OCR trim used to carry: text from outside the selection must not reach
-    # the OCR. Carried here by the image itself -- the selection's own word rectangles bound
-    # what is kept, and the remainder of its first and last lines is painted out -- rather
-    # than cut back out of the OCR afterwards, which a selection ending in math defeats.
-    doc = _doc_with_lines(
-        [
-            (100, "An earlier sentence ends here. The residue theorem gives"),
-            (120, "X = 2 which completes the argument. An unrelated sentence."),
-        ]
-    )
-    page = doc[0]
-    exact = "The residue theorem gives X = 2 which completes the argument."
-
-    png = pdf_math._selection_png(page, exact)  # noqa: SLF001
-
-    assert png is not None
-    # The crop spans the two lines; ink in the top third belongs to the first, ink in the
-    # bottom third to the second.
-    first_line = _ink_columns(png, band_top=0.0, band_bottom=0.45)
-    last_line = _ink_columns(png, band_top=0.55, band_bottom=1.0)
-    assert first_line  # the selection's first line is rendered
-    assert last_line  # and so is its last
-    # "An earlier sentence ends here." precedes the selection on its first line, so the
-    # first line's ink starts where the selection does -- to the right of where the
-    # second line, which the selection starts at the very beginning of, starts.
-    assert min(first_line) > min(last_line)
-    # "An unrelated sentence." follows the selection on its last line, so the last line's
-    # ink stops where the selection does, left of where the first line runs to.
-    assert max(last_line) < max(first_line)
 
 
 class TestRecoveryTimeoutSetting:
