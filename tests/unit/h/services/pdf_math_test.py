@@ -11,6 +11,9 @@ positions: a real boundary, no network, no OCR.
 
 from __future__ import annotations
 
+import http.server
+import threading
+
 import pymupdf as fitz
 import pytest
 import requests
@@ -207,3 +210,56 @@ def test_ocr_latex_wraps_mathpix_request_failure(monkeypatch):
     monkeypatch.setattr(pdf_math.requests, "post", _boom)
     with pytest.raises(MathRecoveryError, match="Mathpix OCR request failed"):
         pdf_math.ocr_latex(b"\x89PNG")
+
+
+def test_trim_to_quote_raises_when_the_quote_has_too_few_recognizable_words():
+    # A quote with fewer than three recognizable words (e.g. a bare formula) gives the
+    # trimmer no prose anchor. Returning the untrimmed crop would persist neighboring
+    # column text as if it were the selection, so this must fail the recovery instead.
+    ocr = "$\\omega^2 = 0$ Unrelated trailing sentence from the next paragraph."
+    with pytest.raises(MathRecoveryError, match="trim"):
+        pdf_math._trim_to_quote(ocr, "$\\omega^2=0$")  # noqa: SLF001
+
+
+def test_trim_to_quote_raises_when_the_trailing_prose_cannot_be_located():
+    # The quote's last words are not findable in the OCR output (e.g. OCR read them
+    # differently). Keeping the whole crop would silently include the next sentence,
+    # so an unlocatable tail must fail the recovery instead.
+    exact = "the residue is some finite data attached"
+    ocr = "the residue is $\\omega$ some other words entirely. Next sentence here."
+    with pytest.raises(MathRecoveryError, match="trim"):
+        pdf_math._trim_to_quote(ocr, exact)  # noqa: SLF001
+
+
+def test_fetch_pdf_evicts_the_oldest_entry_beyond_the_cache_bound():
+    # The PDF byte cache exists to dedupe fetches within a burst of annotations on one
+    # document; it must not grow without bound for the life of a web process.
+    doc = _doc_with_lines([(100, "cached document")])
+    payload = doc.tobytes()
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.send_header("Content-Type", "application/pdf")
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def log_message(self, *_args):
+            """Keep test output quiet; assertions cover the behavior."""
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        base = f"http://127.0.0.1:{server.server_address[1]}"
+        first = f"{base}/doc-0.pdf"
+        pdf_math._fetch_pdf(first)  # noqa: SLF001
+        for n in range(1, pdf_math._PDF_CACHE_MAX + 1):  # noqa: SLF001
+            pdf_math._fetch_pdf(f"{base}/doc-{n}.pdf")  # noqa: SLF001
+
+        assert len(pdf_math._pdf_cache) == pdf_math._PDF_CACHE_MAX  # noqa: SLF001
+        assert first not in pdf_math._pdf_cache  # noqa: SLF001 - oldest evicted
+        assert f"{base}/doc-{pdf_math._PDF_CACHE_MAX}.pdf" in pdf_math._pdf_cache  # noqa: SLF001
+    finally:
+        server.shutdown()
+        thread.join()
