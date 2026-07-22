@@ -1,4 +1,4 @@
-"""A reader annotating real mathematical web pages, driven through the API their browser calls.
+r"""A reader annotating real mathematical web pages, driven through the API their browser calls.
 
 Every test posts to ``/api/annotations`` exactly as the client does -- a
 ``TextQuoteSelector`` whose ``exact`` is what the client's ``renderedTextFromRange``
@@ -12,7 +12,7 @@ reaches a browser (``tests/corpus/pages``):
 * ``ar5iv-enriques.html`` -- LaTeXML MathML with the authored TeX in an ``annotation``
   child, from ar5iv's rendering of arXiv:2312.03638 (the same paper the PDF walkthrough
   annotates).
-* ``mathjax-category-theory.html`` -- Pandoc ``<span class="math">`` holding ``\\(..\\)``,
+* ``mathjax-category-theory.html`` -- Pandoc ``<span class="math">`` holding ``\(..\)``,
   typeset in the browser by MathJax v3, with the page's own macro definitions.
 * ``katex-docusaurus.html`` -- KaTeX rendered server-side: visible spans beside hidden
   MathML carrying the TeX.
@@ -56,7 +56,7 @@ MATHEMATICS = {
     "mathjax_inline_math": [r"V^* = n", r"V^* \cong R^n"],
     "mathjax_custom_macro": [r"V\dual"],
     "mathjax_display_math": ["0+1 &= 1+0 = 1"],
-    "katex_inline_math": [r"f\colon[a,b] \to \R", r"F(x)=\n\int_{a}^{x} f(t)\,dt"],
+    "katex_inline_math": [r"f\colon[a,b] \to \R", "\n" + r"\int_{a}^{x} f(t)\,dt"],
     "katex_display_math": [r"\int_0^{2\pi} \sin(x)\,dx"],
     "katex_prose_only": [],
     "plain_prose": [],
@@ -134,9 +134,7 @@ class TestAnnotatingAMathematicalWebPage:
         payload = _annotation(page_url(drag), SELECTIONS[drag]["exact"])
         payload["text"] = ""
 
-        response = app.post_json(
-            "/api/annotations", payload, headers=token_auth_header
-        )
+        response = app.post_json("/api/annotations", payload, headers=token_auth_header)
 
         assert response.status_code == 200
         assert r"2K\sim 0" in response.json["normalized_quote"]
@@ -244,5 +242,5 @@ def served_pages():
 
 @pytest.fixture
 def page_url(served_pages):
-    """The URL of the page a given drag was recorded on."""
+    """Return the URL of the page a given drag was recorded on."""
     return lambda drag: f"{served_pages}/{SELECTIONS[drag]['page']}"
