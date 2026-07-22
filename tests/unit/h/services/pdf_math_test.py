@@ -301,6 +301,55 @@ def test_trim_to_quote_raises_when_the_leading_prose_cannot_be_located():
         pdf_math._trim_to_quote(ocr, exact)  # noqa: SLF001
 
 
+def test_clean_pdf_quote_recovers_a_selection_that_ends_in_math(monkeypatch):
+    # The live failure this reproduces (dzackgarza/h#3): every PDF selection ending in math
+    # was rejected with "the quote's trailing words were not found in the OCR output". The
+    # quote, the page text and the OCR below are the real ones observed on arXiv 2312.03638
+    # page 1. The trailing tokens of the flattened text layer are "L", "⊗", "2"; Mathpix
+    # returns the same region as \mathcal{L}_{Z}^{\otimes 2}, so a trailing-prose anchor
+    # cannot match a recovery that in fact succeeded.
+    doc = _doc_with_lines(
+        [(100, "surfaces ( Z, M ) with a 2-divisible polarization M = L ⊗ 2")]
+    )
+    uri = "http://test.invalid/ends-in-math.pdf"
+    pdf_math._pdf_cache[uri] = doc.tobytes()  # noqa: SLF001
+    ocr = (
+        r"surfaces $(Z, \mathcal{M})$ with a 2 -divisible polarization "
+        r"$\mathcal{M}=\mathcal{L}_{Z}^{\otimes 2}$"
+    )
+    monkeypatch.setattr(pdf_math, "ocr_latex", lambda _png: ocr)
+
+    result = pdf_math.clean_pdf_quote(
+        uri, 0, "surfaces ( Z,  M )   with   a   2-divisible   polarization   M  =  L ⊗ 2"
+    )
+
+    assert result == ocr
+
+
+def test_selection_crop_excludes_the_neighbouring_text_on_the_selection_lines():
+    # The burden the OCR trim used to carry: the crop must not carry text from outside the
+    # selection into the OCR. Carried here by the crop itself -- the selection's own first
+    # and last word rectangles are known, so the line remainders on either side are removed
+    # from the page rather than cut back out of the OCR afterwards.
+    doc = _doc_with_lines(
+        [
+            (100, "An earlier sentence ends here. The residue theorem gives"),
+            (120, "X = 2 which completes the argument. An unrelated sentence follows."),
+        ]
+    )
+    page = doc[0]
+    exact = "The residue theorem gives X = 2 which completes the argument."
+
+    rect = pdf_math._selection_crop(page, exact)  # noqa: SLF001
+
+    assert rect is not None
+    captured = page.get_textbox(rect)
+    assert "residue theorem gives" in captured  # the selection's first line
+    assert "completes the argument" in captured  # the selection's last line
+    assert "An earlier sentence" not in captured  # before it, on the same line
+    assert "unrelated sentence" not in captured  # after it, on the same line
+
+
 class TestRecoveryTimeoutSetting:
     """A misconfigured recovery timeout is an operator mistake, not an internal fault.
 
