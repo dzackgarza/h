@@ -4,10 +4,12 @@ from unittest.mock import sentinel
 import pytest
 from h_matchers import Any
 from pyramid.authorization import Everyone
+from sqlalchemy import event
 
-from h.models import Annotation, AnnotationMetadata, ModerationStatus
+from h.models import AnnotationMetadata, ModerationStatus
 from h.security.permissions import Permission
 from h.services.annotation_json import AnnotationJSONService, factory
+from h.services.annotation_read import AnnotationReadService
 from h.traversal import AnnotationContext
 
 
@@ -272,13 +274,13 @@ class TestAnnotationJSONService:
 
         result = service.present_all_for_user(sentinel.annotation_ids, user)
 
-        annotation_read_service.get_annotations_by_id.assert_called_once_with(
-            ids=sentinel.annotation_ids,
-            eager_load=[
-                Annotation.document,
-                Annotation.group,
-                Annotation.mentions,
-            ],
+        # Which relationships are eager loaded is not asserted here: a loader list is
+        # satisfied by configuration, and would keep passing if `present` grew a read of
+        # something else. `TestListPresentationQueryCount` owns that claim by counting
+        # the queries a real list presentation issues.
+        assert (
+            annotation_read_service.get_annotations_by_id.call_args.kwargs["ids"]
+            is sentinel.annotation_ids
         )
         flag_service.all_flagged.assert_called_once_with(user, sentinel.annotation_ids)
         flag_service.flag_counts.assert_called_once_with(sentinel.annotation_ids)
@@ -335,6 +337,107 @@ class TestAnnotationJSONService:
     @pytest.fixture(autouse=True)
     def DocumentJSONPresenter(self, patch):
         return patch("h.services.annotation_json.DocumentJSONPresenter")
+
+
+class TestListPresentationQueryCount:
+    """Presenting a list must not cost a round trip per annotation in it.
+
+    Every relationship ``present`` reads has to be covered by the up-front load that
+    ``present_all_for_user`` performs, including the normalized companion row -- otherwise
+    the cost of every listing endpoint grows with the number of annotations it returns.
+
+    The claim is proved by counting the statements a real session actually issues while
+    presenting lists of two different lengths, not by inspecting the loader list: a loader
+    list keeps matching even when ``present`` starts reading something that is not in it.
+    """
+
+    def test_the_query_count_does_not_grow_with_the_number_of_annotations(
+        self, service, db_session, user, factories, statements
+    ):
+        short = self.annotations(factories, db_session, 2)
+        long = self.annotations(factories, db_session, 10)
+
+        short_queries = self.present_and_count(
+            service, db_session, user, short, statements
+        )
+        long_queries = self.present_and_count(
+            service, db_session, user, long, statements
+        )
+
+        assert long_queries == short_queries
+
+    def annotations(self, factories, db_session, count):
+        """Build ``count`` annotations, alternating present and absent normalized rows.
+
+        A missing companion row is the case that most easily reintroduces a per-annotation
+        query, so both kinds are in every list.
+        """
+        expected = []
+        for index in range(count):
+            annotation = factories.Annotation(
+                target_selectors=[
+                    {"type": "TextQuoteSelector", "exact": f"selection {index}"}
+                ]
+            )
+            quote = ""
+            if index % 2 == 0:
+                quote = rf"selection {index} with $x^{{{index}}}$"
+                factories.AnnotationNormalized(
+                    annotation=annotation, normalized_quote=quote, method="ocr"
+                )
+            expected.append((annotation.id, quote))
+        db_session.flush()
+        return expected
+
+    def present_and_count(self, service, db_session, user, expected, statements):
+        # Nothing may be served from the identity map: a listing request starts with a
+        # cold session, so the relationship reads must be paid for here.
+        db_session.expire_all()
+        before = len(statements)
+
+        presented = service.present_all_for_user([id_ for id_, _ in expected], user)
+
+        # The presented quotes prove the relationship really was read; a count taken
+        # while nothing touched it would be vacuous.
+        assert [(model["id"], model["normalized_quote"]) for model in presented] == (
+            expected
+        )
+        return len(statements) - before
+
+    @pytest.fixture
+    def statements(self, db_session):
+        recorded = []
+
+        def record(_conn, _cursor, statement, *_args):
+            recorded.append(statement)
+
+        bind = db_session.get_bind()
+        event.listen(bind, "before_cursor_execute", record)
+        yield recorded
+        event.remove(bind, "before_cursor_execute", record)
+
+    @pytest.fixture
+    def service(
+        self,
+        db_session,
+        links_service,
+        flag_service,
+        user_service,
+        mention_service,
+        pyramid_request,
+    ):
+        return AnnotationJSONService(
+            annotation_read_service=AnnotationReadService(db_session),
+            links_service=links_service,
+            flag_service=flag_service,
+            user_service=user_service,
+            mention_service=mention_service,
+            request=pyramid_request,
+        )
+
+    @pytest.fixture
+    def user(self, factories):
+        return factories.User()
 
 
 class TestFactory:
