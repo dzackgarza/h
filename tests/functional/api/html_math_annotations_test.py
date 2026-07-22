@@ -98,6 +98,19 @@ INVISIBLE_TO_THE_READER = {
     "mathoverflow_only_a_displayed_formula": ["Γ(1/15)"],
 }
 
+#: A phrase each page carries well away from every drag recorded on it. The quote may run a
+#: word past the selection -- that costs the reader nothing -- but a recovery that reaches
+#: this is not quoting the reader's selection at all. Without it, containment assertions
+#: pass just as happily on an implementation that returns the whole document.
+ELSEWHERE_ON_THE_PAGE = {
+    "ar5iv-enriques.html": "the classification of big and nef linear system",
+    "mathjax-category-theory.html": "results used here will be stated with very minimal proof",
+    "mathjax-stackexchange.html": "must log in to answer this question",
+    "mathjax-mathoverflow.html": "is a well-known analogy between",
+    "katex-docusaurus.html": "Please read the KaTeX documentation",
+    "plain-about.html": "Google Scholar",
+}
+
 pytestmark = pytest.mark.usefixtures("init_elasticsearch")
 
 
@@ -116,6 +129,7 @@ class TestAnnotatingAMathematicalWebPage:
         quote = response.json["normalized_quote"]
         for latex in MATHEMATICS[drag]:
             assert latex in quote
+        assert ELSEWHERE_ON_THE_PAGE[SELECTIONS[drag]["page"]] not in quote
 
     @pytest.mark.parametrize("drag", sorted(INVISIBLE_TO_THE_READER))
     def test_the_quote_carries_nothing_the_reader_could_not_see(
