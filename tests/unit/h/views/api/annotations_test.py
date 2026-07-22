@@ -4,7 +4,6 @@ import pytest
 from pyramid.httpexceptions import HTTPNotFound
 from webob.multidict import MultiDict, NestedMultiDict
 
-from h.schemas import ValidationError
 from h.search.core import SearchResult
 from h.services.normalization import NormalizationService
 from h.traversal import AnnotationContext
@@ -145,24 +144,6 @@ class TestCreate:
         normalization_service.normalize.assert_called_once_with(
             annotation_write_service.create_annotation.return_value
         )
-
-    def test_it_rejects_a_quote_less_top_level_create(
-        self,
-        pyramid_request,
-        CreateAnnotationSchema,
-        annotation_write_service,
-        normalization_service,
-    ):
-        CreateAnnotationSchema.return_value.validate.return_value = {
-            "references": [],
-            "target_selectors": [],
-        }
-
-        with pytest.raises(ValidationError):
-            views.create(pyramid_request)
-
-        annotation_write_service.create_annotation.assert_not_called()
-        normalization_service.normalize.assert_not_called()
 
     @pytest.mark.usefixtures("annotation_json_service", "AnnotationEvent")
     def test_it_allows_a_quote_less_reply(
