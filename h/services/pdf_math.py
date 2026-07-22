@@ -21,19 +21,6 @@ import re
 import fitz  # pymupdf
 import requests
 
-# Greek letters and math operators survive a PDF text-layer selection as ordinary Unicode
-# (not the Mathematical Alphanumeric block used by some HTML renderers). They are the
-# signal that a PDF quote requires rendered-region recovery rather than identity.
-_PDF_MATH = re.compile(
-    "["
-    "Ͱ-Ͽ"  # Greek
-    "∀-⋿"  # mathematical operators
-    "⨀-⫿"  # supplemental math operators
-    "⟀-⟿"  # miscellaneous math symbols-A
-    "←-⇿"  # arrows
-    "]"
-)
-
 _DPI = 220  # render resolution of the cropped region; reads cleanly for Mathpix
 
 
@@ -45,11 +32,6 @@ class MathRecoveryError(Exception):
     error or timeout. In the create path this propagates to ``pyramid_tm``, which rolls the
     request back so nothing is persisted: a stored annotation never carries raw garble.
     """
-
-
-def pdf_has_math(quote: str) -> bool:
-    """Return whether a PDF text-layer quote contains a math-bearing signal."""
-    return bool(_PDF_MATH.search(quote))
 
 
 def recovery_timeout() -> float:

@@ -44,7 +44,7 @@ def test_command_commits_successes_and_reports_every_failure(
     assert "normalized 2 existing annotation(s)" in result.output
     assert "failed\tann-1\tsource unavailable" in result.output
     assert "failed\tann-2\tOCR timed out" in result.output
-    assert "2 annotation(s) remain without normalized quotes" in result.output
+    assert "2 annotation(s) remain incorrectly normalized" in result.output
 
 
 @pytest.fixture

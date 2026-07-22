@@ -36,14 +36,14 @@ class AnnotationNormalized(Base, Timestamps):
 
     normalized_quote: Mapped[str] = mapped_column(sa.UnicodeText, nullable=False)
     """The selected text with rendered math recovered, in the document's LaTeX, as
-    ``\\(..\\)`` / ``$$..$$`` for a markdown/KaTeX view. Equal to the raw quote when the
-    selection spans no math."""
+    ``\\(..\\)`` / ``$$..$$`` for a markdown/KaTeX view. It may equal the raw quote only
+    when semantic HTML source extraction proves that no recovery is needed."""
 
     method: Mapped[str] = mapped_column(sa.UnicodeText, nullable=False)
-    """How it was produced: ``identity`` (math-less text kept verbatim), ``html``
+    """How it was produced: ``identity`` (semantic HTML source matched verbatim), ``html``
     (recovered from the page's math source), or ``ocr`` (Mathpix on a rendered region).
-    Never ``raw`` -- a genuine recovery failure raises and rolls the create back, so no row
-    is ever written for it."""
+    Every PDF selection uses ``ocr``. Never ``raw`` -- a genuine recovery failure raises
+    and rolls the create back, so no row is ever written for it."""
 
     def __repr__(self) -> str:
         return helpers.repr_(self, ["id", "annotation_id", "method"])

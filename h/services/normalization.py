@@ -22,7 +22,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from sqlalchemy import orm, select
+from sqlalchemy import or_, orm, select
 
 from h.models import Annotation, AnnotationNormalized
 from h.models.document import DocumentURI
@@ -30,7 +30,6 @@ from h.services.pdf_math import (
     MathRecoveryError,
     _ocr_latex,
     clean_pdf_quote,
-    pdf_has_math,
     recovery_timeout,
 )
 
@@ -184,19 +183,57 @@ class NormalizationService:
         return normalized
 
     def reconcile_missing(self, limit: int | None = None) -> ReconciliationResult:
-        """Normalize every recoverable old row and report each unrecoverable residue."""
+        """Normalize missing rows, and repair rows produced by invalid old methods."""
         normalized = 0
         failures = []
-        for annotation in self._missing_annotations(limit):
+        for annotation in self._reconciliation_candidates(limit):
             try:
                 with self._session.begin_nested():
-                    row = self.normalize(annotation)
+                    row = self._reconcile(annotation)
             except MathRecoveryError as exc:
                 failures.append((annotation.id, str(exc)))
             else:
                 if row is not None:
                     normalized += 1
         return ReconciliationResult(normalized=normalized, failures=failures)
+
+    def _reconcile(self, annotation: Annotation) -> AnnotationNormalized | None:
+        if annotation.normalized is None:
+            return self.normalize(annotation)
+
+        quote = annotation.quote
+        if not quote:
+            return None
+        recovered, method = self._recover(annotation, quote)
+        annotation.normalized.normalized_quote = recovered
+        annotation.normalized.method = method
+        return annotation.normalized
+
+    def _reconciliation_candidates(self, limit: int | None):
+        statement = (
+            select(Annotation)
+            .outerjoin(AnnotationNormalized)
+            .where(
+                or_(
+                    AnnotationNormalized.id.is_(None),
+                    AnnotationNormalized.method.in_(("raw", "identity")),
+                )
+            )
+            .order_by(Annotation.created)
+        )
+        count = 0
+        for annotation in self._session.scalars(statement):
+            normalized = annotation.normalized
+            if (
+                normalized is not None
+                and normalized.method == "identity"
+                and _page_index(annotation) is None
+            ):
+                continue
+            yield annotation
+            count += 1
+            if limit is not None and count >= limit:
+                return
 
     def _missing_annotations(self, limit: int | None):
         statement = (
@@ -214,8 +251,6 @@ class NormalizationService:
         uri = annotation.target_uri or ""
         page = _page_index(annotation)
         if page is not None:  # PDF annotation
-            if not pdf_has_math(quote):
-                return (quote, "identity")
             return (self._recover_pdf(annotation, uri, page, quote), "ocr")
         return self._recover_html(uri, quote)
 

@@ -7,7 +7,7 @@ from h.services import NormalizationService
 @click.option("--limit", type=click.IntRange(min=1), default=None)
 @click.pass_context
 def normalize_annotations(ctx, limit):
-    """Backfill display-ready quotes for annotations created before normalization."""
+    """Backfill missing display quotes and repair invalid legacy normalizations."""
     request = ctx.obj["bootstrap"]()
     result = request.find_service(NormalizationService).reconcile_missing(limit=limit)
     request.tm.commit()
@@ -16,5 +16,5 @@ def normalize_annotations(ctx, limit):
         for annotation_id, reason in result.failures:
             click.echo(f"failed\t{annotation_id}\t{reason}", err=True)
         raise click.ClickException(
-            f"{len(result.failures)} annotation(s) remain without normalized quotes"
+            f"{len(result.failures)} annotation(s) remain incorrectly normalized"
         )
