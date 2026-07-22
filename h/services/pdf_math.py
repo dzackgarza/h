@@ -120,21 +120,26 @@ def _quote_rect(
 
 
 def _trim_to_quote(ocr: str, exact: str) -> str:
-    """Trim OCR output back to the annotated span.
+    """Trim OCR output back to the annotated span, or raise when it cannot be bounded.
 
-    The crop is full column width, so its last line can run past the selection into the next
-    sentence; cut after the quote's trailing prose, keeping the math before it. A no-op when
-    those words can't be found (e.g. the tail is itself math), which errs toward keeping text
-    rather than dropping it.
+    The crop is full column width, so its last line can run past the selection into the
+    next sentence; cut after the quote's trailing prose, keeping the math before it. When
+    the quote offers no usable prose anchor (fewer than three recognizable words) or its
+    trailing words cannot be located in the OCR output, the crop cannot be bounded to the
+    selection -- returning it untrimmed would persist neighboring text as if it were the
+    selection, so both cases raise instead (hypothesis-review#7: fail loud, never
+    fail open).
     """
     qtokens = [t for t in exact.split() if _norm(t)]
     if len(qtokens) < 3:
-        return ocr.strip()
+        msg = "OCR trim failed: the quote has too few recognizable words to bound the crop"
+        raise MathRecoveryError(msg)
     core = [re.escape(t.strip(".,;:()[]-")) for t in qtokens[-3:]]
     tail = list(re.finditer(r"\W+".join(core) + r"[.,;:)\]]*", ocr, re.IGNORECASE))
-    if tail:
-        ocr = ocr[: tail[-1].end()]
-    return ocr.strip()
+    if not tail:
+        msg = "OCR trim failed: the quote's trailing words were not found in the OCR output"
+        raise MathRecoveryError(msg)
+    return ocr[: tail[-1].end()].strip()
 
 
 def ocr_latex(png: bytes) -> str:
@@ -170,14 +175,18 @@ def ocr_latex(png: bytes) -> str:
     return resp.json().get("text", "").strip()
 
 
+# Insertion-ordered and bounded: enough to dedupe fetches within a burst of annotations
+# on the same few documents, without accumulating PDF bytes for the life of a web process.
+_PDF_CACHE_MAX = 8
 _pdf_cache: dict[str, bytes] = {}
 
 
 def _fetch_pdf(uri: str) -> bytes:
     """Fetch (and cache) the PDF bytes for ``uri`` (http(s)).
 
-    Fetched once and cached, so a batch of annotations on one document downloads it a single
-    time.
+    Fetched once and cached, so a batch of annotations on one document downloads it a
+    single time. The cache holds at most ``_PDF_CACHE_MAX`` documents; the oldest entry
+    is evicted beyond that.
     """
     if uri not in _pdf_cache:
         try:
@@ -186,6 +195,8 @@ def _fetch_pdf(uri: str) -> bytes:
         except requests.RequestException as exc:
             msg = f"could not fetch PDF {uri!r}: {exc}"
             raise MathRecoveryError(msg) from exc
+        while len(_pdf_cache) >= _PDF_CACHE_MAX:
+            del _pdf_cache[next(iter(_pdf_cache))]
         _pdf_cache[uri] = resp.content
     return _pdf_cache[uri]
 
@@ -213,8 +224,8 @@ def clean_pdf_quote(
         msg = "PDF region could not be located for the quote"
         raise MathRecoveryError(msg)
     png = doc[page_index].get_pixmap(dpi=_DPI, clip=rect).tobytes("png")
-    latex = _trim_to_quote(ocr_latex(png), exact)
-    if not latex:
+    ocr = ocr_latex(png)
+    if not ocr.strip():
         msg = "OCR returned empty output for the PDF region"
         raise MathRecoveryError(msg)
-    return latex
+    return _trim_to_quote(ocr, exact)

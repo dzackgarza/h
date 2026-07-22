@@ -263,3 +263,4 @@ def test_fetch_pdf_evicts_the_oldest_entry_beyond_the_cache_bound():
     finally:
         server.shutdown()
         thread.join()
+        server.server_close()
