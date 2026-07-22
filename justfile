@@ -29,9 +29,20 @@ test-ci: test-push
 _record-pdf-math-fixtures:
     .tox/tests/bin/python tests/corpus/record_mathpix.py
 
+# Re-record what a reader's drag captures on each fixture page. Drives a real browser
+# (H_CHROMIUM_PATH) and lets the pages load their own renderers, so it needs the network;
+# run it when a fixture page or one of the recorded drags changes.
+[private]
+_record-html-selections:
+    node tests/corpus/record_html_selections.mjs
+
 [private]
 _test-pdf-annotations:
     {{tox}} -qe functests -- tests/functional/api/pdf_math_annotations_test.py
+
+[private]
+_test-html-annotations:
+    {{tox}} -qe functests -- tests/functional/api/html_math_annotations_test.py
 
 [private]
 _test-page-note:

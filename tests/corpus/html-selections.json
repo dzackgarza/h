@@ -1,0 +1,50 @@
+{
+  "ar5iv_prose_and_inline_math": {
+    "page": "ar5iv-enriques.html",
+    "exact": "Enriques surfaces are quotients of K3 surfaces by basepoint free\ninvolutions. They satisfy 2​K∼0similar-to2𝐾02K\\sim 0 and q=0𝑞0q=0 and occupy a place\nsomewhere in between rational and K3 surfaces. Unlike K3 surfaces,\nthere are only finitely many moduli spaces of polarized Enriques surfaces, see\n[GH16]. Each of them parameterizes the\nsame surfaces, with some finite data attached."
+  },
+  "ar5iv_paragraph_of_definitions": {
+    "page": "ar5iv-enriques.html",
+    "exact": "In this paper we consider the moduli space FEn,2subscript𝐹En2F_{\\rm En,2} of pairs\n(Z,[ℒZ])𝑍delimited-[]subscriptℒ𝑍(Z,[{\\mathcal{L}}_{Z}]), where Z𝑍Z is an Enriques surface with A​D​E𝐴𝐷𝐸ADE\nsingularities and [ℒZ]∈Pic⁡Z/ℤ2delimited-[]subscriptℒ𝑍Pic𝑍subscriptℤ2[{\\mathcal{L}}_{Z}]\\in\\operatorname{Pic}Z/{\\mathbb{Z}}_{2} is an ample numerical\npolarization of degree 222. Equivalently, this is the moduli space of\nA​D​E𝐴𝐷𝐸ADE Enriques surfaces (Z,ℳ)𝑍ℳ(Z,{\\mathcal{M}}) with a 222-divisible polarization\nℳ=ℒZ⊗2∈Pic⁡Zℳsuperscriptsubscriptℒ𝑍tensor-productabsent2Pic𝑍{\\mathcal{M}}={\\mathcal{L}}_{Z}^{\\otimes 2}\\in\\operatorname{Pic}Z of degree 888.\nThe Baily-Borel compactification F¯En,2BBsuperscriptsubscript¯𝐹En2BB{\\overline{F}}_{\\rm En,2}^{\\rm BB} of this space was\ndescribed by Sterk [Ste91]."
+  },
+  "ar5iv_theorem_statement": {
+    "page": "ar5iv-enriques.html",
+    "exact": "The normalization of F¯En,2subscript¯𝐹En2{\\overline{F}}_{\\rm En,2} is a semitoroidal\ncompactification F¯En,2𝔉superscriptsubscript¯𝐹En2𝔉{\\overline{F}}_{\\rm En,2}^{\\mathfrak{F}}\ncorresponding to a collection\n𝔉={𝔉k}k=1,2,3,4,5𝔉subscriptsuperscript𝔉𝑘𝑘12345{\\mathfrak{F}}=\\{{\\mathfrak{F}}^{k}\\}_{k=1,2,3,4,5} of explicit semifans, one\nfor each 00-cusp of FEn,2subscript𝐹En2F_{\\rm En,2}, and it is dominated by a toroidal\ncompactification F¯En,2coxsuperscriptsubscript¯𝐹En2cox{\\overline{F}}_{\\rm En,2}^{\\rm cox} for a collection\n𝔉cox={𝔉coxk}k=1,2,3,4,5subscript𝔉coxsubscriptsubscriptsuperscript𝔉𝑘cox𝑘12345{\\mathfrak{F}}_{\\rm cox}=\\{{\\mathfrak{F}}^{k}_{\\rm cox}\\}_{k=1,2,3,4,5} of Coxeter fans."
+  },
+  "ar5iv_drag_through_a_commutative_diagram": {
+    "page": "ar5iv-enriques.html",
+    "exact": "Consider a surface Y=ℙ1×ℙ1𝑌superscriptℙ1superscriptℙ1Y={\\mathbb{P}}^{1}\\times{\\mathbb{P}}^{1} with an involution\nτ:(x,y)→(−x,−y):𝜏→𝑥𝑦𝑥𝑦\\tau\\colon(x,y)\\to(-x,-y) and quotient W=Y/τ𝑊𝑌𝜏W=Y/\\tau. Let\nB∈|−2​KY|𝐵2subscript𝐾𝑌B\\in|-2K_{Y}| be a τ𝜏\\tau-invariant divisor with at worst A​D​E𝐴𝐷𝐸ADE\nsingularities not passing through the four points with\nx,y∈{0,∞}𝑥𝑦0x,y\\in\\{0,\\infty\\} fixed by τ𝜏\\tau. The double cover\nπ:X→Y:𝜋→𝑋𝑌\\pi\\colon X\\to Y branched in B𝐵B is a K3 surface with a del\nPezzo involution ιdPsubscript𝜄dP\\iota_{{\\rm dP}} so that Y=X/ιdP𝑌𝑋subscript𝜄dPY=X/\\iota_{{\\rm dP}}. The involution\nτ𝜏\\tau on Y𝑌Y lifts to a basepoint-free Enriques involution\nιEnsubscript𝜄En\\iota_{{\\rm En}} on X𝑋X commuting with ιdPsubscript𝜄dP\\iota_{{\\rm dP}} and the quotient Z=X/ιEn𝑍𝑋subscript𝜄EnZ=X/\\iota_{{\\rm En}} is an\nEnriques surface. The second lift of τ𝜏\\tau is a Nikulin involution\nand the quotient Z′=X/ιNiksuperscript𝑍′𝑋subscript𝜄NikZ^{\\prime}=X/\\iota_{{\\rm Nik}} is a K3 surface with eight A1subscript𝐴1A_{1}\nsingularities and possibly more. This gives the following commutative\ndiagram:\n\n\n\n(1)\n\nX𝑋{X}Z𝑍{Z}Z′superscript𝑍′{Z^{\\prime}}Y𝑌{Y}W𝑊{W}π𝜋\\scriptstyle{\\pi}ψ𝜓\\scriptstyle{\\psi}ψ′superscript𝜓′\\scriptstyle{\\psi^{\\prime}}ρ𝜌\\scriptstyle{\\rho}ρ′superscript𝜌′\\scriptstyle{\\rho^{\\prime}}φ𝜑\\scriptstyle{\\varphi}\n\n\n"
+  },
+  "mathjax_prose_only": {
+    "page": "mathjax-category-theory.html",
+    "exact": "This is meant to be a relatively short and non-rigorous introduction to Category Theory. Although I will be defining and using a lot of the technical terminology that is commonly used, this talk is primarily aimed at introducing these concepts, why they exist, and where they’re useful and commonly used."
+  },
+  "mathjax_inline_math": {
+    "page": "mathjax-category-theory.html",
+    "exact": "In particular, we have dim V∗=n, so V∗≅Rn≅V. So V is isomorphic to its dual."
+  },
+  "mathjax_custom_macro": {
+    "page": "mathjax-category-theory.html",
+    "exact": "So V is isomorphic to V∨, and it is also isomorphic to V∨∨. \nHowever, when one goes through the process of actually finding and constructing these bijections, one finds that the map from V→V∨ depends on choosing a basis for V. On the other hand, the map from V to V∨∨ requires no such choice. In this way, we say that V is isomorphic to its dual, but V is naturally isomorphic to it’s double dual. This idea of “naturality” is part of what category theory sets out to make precise."
+  },
+  "mathjax_display_math": {
+    "page": "mathjax-category-theory.html",
+    "exact": "\n\n0+1=1+0=10+0=1+1=0\n"
+  },
+  "katex_inline_math": {
+    "page": "katex-docusaurus.html",
+    "exact": "Let f ⁣:[a,b]→Rf\\colon[a,b] \\to \\Rf:[a,b]→R be Riemann integrable. Let F ⁣:[a,b]→RF\\colon[a,b]\\to\\RF:[a,b]→R be F(x)=∫axf(t) dtF(x)=\n\\int_{a}^{x} f(t)\\,dtF(x)=∫ax​f(t)dt. Then FFF is continuous, and at all xxx such that fff is continuous at xxx, FFF is differentiable at xxx with F′(x)=f(x)F'(x)=f(x)F′(x)=f(x)."
+  },
+  "katex_display_math": {
+    "page": "katex-docusaurus.html",
+    "exact": "I=∫02πsin⁡(x) dxI = \\int_0^{2\\pi} \\sin(x)\\,dx\nI=∫02π​sin(x)dx"
+  },
+  "katex_prose_only": {
+    "page": "katex-docusaurus.html",
+    "exact": "Mathematical equations can be rendered using KaTeX."
+  },
+  "plain_prose": {
+    "page": "plain-about.html",
+    "exact": "I am a postdoctoral researcher at the National Center for Theoretical Sciences (NCTS) in Taipei, Taiwan. I completed my PhD at the University of Georgia, where I worked with Valery Alexeev, and I work on compactifications of moduli spaces of complex algebraic surfaces."
+  }
+}
