@@ -97,7 +97,16 @@ def _quote_rect(
     the quote can't be located, so the caller keeps the raw text rather than OCR the wrong
     region.
     """
-    entries = [(_norm(w[4]), fitz.Rect(w[:4])) for w in page.get_text("words")]
+    # Words with no alphanumeric core (bare "=", "·", ...) are dropped from the index:
+    # quote tokenization drops them too, and a surviving empty-form entry shifts the
+    # start/end projection by one word per glyph, cutting the crop short (found by the
+    # live integrated proof). Their glyph area still lands inside the box, which spans
+    # the kept words bracketing them.
+    entries = [
+        (form, fitz.Rect(w[:4]))
+        for w in page.get_text("words")
+        if (form := _norm(w[4]))
+    ]
     forms = [form for form, _ in entries]
     qwords = [w for w in (_norm(t) for t in exact.split()) if w]
     if not entries or not qwords:
