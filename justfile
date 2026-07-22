@@ -22,6 +22,17 @@ test-push: test-commit
 test-ci: test-push
     {{tox}} -qe functests
 
+# Re-record Mathpix's answers for the PDF annotation walkthrough. Calls the live API with
+# the configured key and costs money, which is why the answers are committed; run it when
+# the walkthrough's selections change or when a crop moves.
+[private]
+_record-pdf-math-fixtures:
+    .tox/tests/bin/python tests/corpus/record_mathpix.py
+
+[private]
+_test-pdf-annotations:
+    {{tox}} -qe functests -- tests/functional/api/pdf_math_annotations_test.py
+
 [private]
 _test-page-note:
     {{tox}} -qe functests -- tests/functional/api/annotations_test.py::TestPostAnnotation::test_it_creates_a_page_note_without_normalization
