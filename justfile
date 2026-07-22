@@ -1,61 +1,54 @@
-# ai-review-ci Bun + Python QC delegation justfile.
-# The central implementation lives in ~/ai-review-ci/justfiles/.
-# Public recipes delegate to both central gates while preserving this repo as the caller root.
+# Native QC delegation justfile.
+# h is a fork of upstream hypothesis/h and keeps upstream's native QC (tox: ruff,
+# mypy, pytest). The ai-review-ci language gates do not apply to this fork; only the
+# AI review workflows (review-general/slop/pr) run from .github/workflows/.
 
-# ai-review-ci contract variables consumed by doctor and workflow installers.
-ai_review_ci_schema_version := "1"
-ai_review_ci_profile := "bun-python"
-ai_review_ci_ref := "main"
-ai_review_ci_release_channel := "main"
-ai_review_ci_workflow_template_version := "1"
-ai_review_ci_local_delegation := "global-justfile"
-ai_review_ci_default_branch := "main"
+# tox<4 with the plugins tox.ini requires, run ephemerally (no global install).
+tox := "uvx --python 3.11 --with tox-envfile --with tox-faster --with tox-run-command 'tox<4'"
+
 # List available recipes.
 default:
     @just --list
 
-# Run commit-tier Python and Bun QC through the central implementation.
+# Commit-tier QC: formatting, lint, and types via upstream's tox envs.
 test-commit:
-    @just -f ~/ai-review-ci/justfiles/python.just -d . test-commit
-    @just -f ~/ai-review-ci/justfiles/bun.just -d . test-commit
+    {{tox}} -qe checkformatting,lint,typecheck
 
-# Run the full Python and Bun test suites before pushing.
-test-push:
-    @just -f ~/ai-review-ci/justfiles/python.just -d . test-push
-    @just -f ~/ai-review-ci/justfiles/bun.just -d . test-push
+# Push-tier QC: commit tier plus the unit test suite.
+test-push: test-commit
+    {{tox}} -qe tests
 
-# Run CI acceptance QC through both central implementations.
-test-ci:
-    @just -f ~/ai-review-ci/justfiles/python.just -d . test-ci
-    @just -f ~/ai-review-ci/justfiles/bun.just -d . test-ci
+# CI-tier QC: push tier plus the functional test suite.
+test-ci: test-push
+    {{tox}} -qe functests
 
 [private]
 _test-page-note:
-    pyenv exec tox -qe functests -- tests/functional/api/annotations_test.py::TestPostAnnotation::test_it_creates_a_page_note_without_normalization
+    {{tox}} -qe functests -- tests/functional/api/annotations_test.py::TestPostAnnotation::test_it_creates_a_page_note_without_normalization
 
 [private]
 _test-normalization:
-    pyenv exec tox -qe tests -- tests/unit/h/services/normalization_test.py
+    {{tox}} -qe tests -- tests/unit/h/services/normalization_test.py
 
 [private]
 _test-pdf-normalization:
-    pyenv exec tox -qe tests -- tests/unit/h/services/pdf_math_test.py
+    {{tox}} -qe tests -- tests/unit/h/services/pdf_math_test.py
 
 [private]
 _test-annotation-normalization-error:
-    pyenv exec tox -qe functests -- tests/functional/api/annotations_test.py::TestPostAnnotation::test_a_failed_normalization_rolls_the_create_back
+    {{tox}} -qe functests -- tests/functional/api/annotations_test.py::TestPostAnnotation::test_a_failed_normalization_rolls_the_create_back
 
 [private]
 _test-annotation-json:
-    pyenv exec tox -qe tests -- tests/unit/h/services/annotation_json_test.py
+    {{tox}} -qe tests -- tests/unit/h/services/annotation_json_test.py
 
 [private]
 _test-normalize-annotations-cli:
-    pyenv exec tox -qe tests -- tests/unit/h/cli/commands/normalize_annotations_test.py
+    {{tox}} -qe tests -- tests/unit/h/cli/commands/normalize_annotations_test.py
 
 [private]
 _test-search-reindex:
-    pyenv exec tox -qe tests -- tests/unit/h/cli/commands/search_test.py tests/unit/h/search/index_test.py
+    {{tox}} -qe tests -- tests/unit/h/cli/commands/search_test.py tests/unit/h/search/index_test.py
 
 [private]
 [script(".tox/dev/bin/python")]
