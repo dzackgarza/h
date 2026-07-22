@@ -33,6 +33,7 @@ from h.services.pdf_math import (
     clean_pdf_quote,
     ocr_latex,
     recovery_timeout,
+    subprocess_timeout,
 )
 
 log = logging.getLogger(__name__)
@@ -130,7 +131,9 @@ def _render_html_quote(uri: str, exact: str) -> bytes:
             ],
             capture_output=True,
             text=True,
-            timeout=recovery_timeout() + 5,
+            # The script is given the recovery timeout as its own deadline (above); it
+            # gets that long plus the declared shutdown headroom before being killed.
+            timeout=subprocess_timeout(),
             check=False,
         )
     except (OSError, subprocess.SubprocessError) as exc:

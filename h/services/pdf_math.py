@@ -34,19 +34,82 @@ class MathRecoveryError(Exception):
     """
 
 
-def recovery_timeout() -> float:
-    """Seconds before a recovery call (Mathpix OCR, the Node extractor) is abandoned.
+class MissingRecoverySettingError(MathRecoveryError):
+    """A required math-recovery setting is absent from the deployment environment."""
 
-    ``H_MATH_NORMALIZE_TIMEOUT`` is required configuration -- the declared value lives in
-    the deployment env / tox env, never as a code-level fallback that silently applies
-    when the variable is unset (POLICY.NO_HIDDEN_CONFIG). A missing value fails the
-    recovery loudly, which rolls the create back.
+    def __init__(self, setting: str) -> None:
+        self.setting = setting
+        super().__init__(f"{setting} is not set; math recovery cannot run")
+
+
+class MalformedRecoverySettingError(MathRecoveryError):
+    """A required math-recovery setting holds something that is not a duration.
+
+    A distinct type from :class:`MissingRecoverySettingError` because the two are different
+    operator mistakes with different fixes: one deployment forgot the setting, the other
+    got its value wrong.
     """
-    value = os.environ.get("H_MATH_NORMALIZE_TIMEOUT")
+
+    def __init__(self, setting: str, value: str) -> None:
+        self.setting = setting
+        self.value = value
+        super().__init__(
+            f"{setting}={value!r} is not a positive number of seconds; "
+            f"math recovery cannot run"
+        )
+
+
+# A duration setting is a plain positive number of seconds. Validated by shape at the
+# point of read rather than by converting and catching: an invalid value is then never
+# live, and each consumer is spared its own handling.
+_SECONDS = re.compile(r"\d*\.?\d+")
+
+
+def _seconds_setting(setting: str) -> float:
+    """Read and validate a required duration setting, or raise a recovery failure.
+
+    These settings are required configuration -- the declared values live in the
+    deployment env / tox env, never as a code-level fallback that silently applies when
+    the variable is unset or unusable (POLICY.NO_HIDDEN_CONFIG). A missing or malformed
+    value fails the recovery loudly (which rolls the create back) with the service's own
+    failure type, so it reaches the operator through the math-recovery error view --
+    named, with a diagnostic id -- instead of as an opaque internal error.
+    """
+    raw = os.environ.get(setting, "")
+    value = raw.strip()
     if not value:
-        msg = "H_MATH_NORMALIZE_TIMEOUT is not set; math recovery cannot run"
-        raise MathRecoveryError(msg)
+        raise MissingRecoverySettingError(setting)
+    if not _SECONDS.fullmatch(value) or float(value) <= 0:
+        raise MalformedRecoverySettingError(setting, raw)
     return float(value)
+
+
+def recovery_timeout() -> float:
+    """Seconds before a recovery call (Mathpix OCR, the Node extractor) is abandoned."""
+    return _seconds_setting("H_MATH_NORMALIZE_TIMEOUT")
+
+
+def shutdown_grace() -> float:
+    """Seconds a recovery subprocess gets *beyond* its own deadline before being killed.
+
+    The Node wrappers are handed ``recovery_timeout()`` as the deadline for the work they
+    supervise (a page load, a render). This is the headroom on top of it: without any, the
+    wrapper is killed at the same instant its own work times out, so a browser that is
+    merely slow to start -- cold cache, loaded hardware -- is reported as a recovery
+    timeout. It is configurable precisely so an operator hitting spurious timeouts can
+    raise it without inflating the recovery timeout, which is a different knob with
+    different consequences.
+    """
+    return _seconds_setting("H_MATH_NORMALIZE_SHUTDOWN_GRACE")
+
+
+def subprocess_timeout() -> float:
+    """Wall-clock limit for a recovery subprocess: its work's deadline plus the headroom.
+
+    The single place the two settings are combined, so no call site recomputes the
+    relationship.
+    """
+    return recovery_timeout() + shutdown_grace()
 
 
 def _norm(text: str) -> str:
