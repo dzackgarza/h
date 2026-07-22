@@ -150,12 +150,17 @@ def _trim_to_quote(ocr: str, exact: str) -> str:
     if len(qtokens) < 3:
         msg = "OCR trim failed: the quote has too few recognizable words to bound the crop"
         raise MathRecoveryError(msg)
-    core = [re.escape(t.strip(".,;:()[]-")) for t in qtokens[-3:]]
-    tail = list(re.finditer(r"\W+".join(core) + r"[.,;:)\]]*", ocr, re.IGNORECASE))
-    if not tail:
+    head_core = [re.escape(t.strip(".,;:()[]-")) for t in qtokens[:3]]
+    head = re.search(r"\W+".join(head_core), ocr, re.IGNORECASE)
+    if not head:
+        msg = "OCR trim failed: the quote's leading words were not found in the OCR output"
+        raise MathRecoveryError(msg)
+    tail_core = [re.escape(t.strip(".,;:()[]-")) for t in qtokens[-3:]]
+    tail = list(re.finditer(r"\W+".join(tail_core) + r"[.,;:)\]]*", ocr, re.IGNORECASE))
+    if not tail or tail[-1].end() <= head.start():
         msg = "OCR trim failed: the quote's trailing words were not found in the OCR output"
         raise MathRecoveryError(msg)
-    return ocr[: tail[-1].end()].strip()
+    return ocr[head.start() : tail[-1].end()].strip()
 
 
 def ocr_latex(png: bytes) -> str:
