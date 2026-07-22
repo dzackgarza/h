@@ -2,7 +2,9 @@ import http.server
 import os
 import shutil
 import threading
+import time
 from datetime import UTC, datetime
+from pathlib import Path
 from unittest import mock
 from unittest.mock import sentinel
 from urllib.parse import quote
@@ -472,3 +474,52 @@ class TestRenderHtmlQuoteRealBoundary:
         server.shutdown()
         thread.join()
         server.server_close()
+
+
+class TestSubprocessShutdownGrace:
+    """The wrapper's shutdown headroom is configuration, and it is what bounds the call.
+
+    ``ocr.mjs`` is handed the recovery timeout as its own deadline, so the Python side
+    must allow it that long *plus* declared headroom -- otherwise a wrapper that is
+    winding down is killed at the same instant as the work it supervises, and a slow or
+    cold-starting browser is reported as a recovery timeout. The headroom is therefore a
+    behavioral parameter an operator has to be able to set without inflating the
+    unrelated recovery timeout.
+    """
+
+    @pytest.mark.parametrize(
+        ("grace", "at_least", "at_most"),
+        [("1", 1.5, 3.0), ("3", 3.5, 5.0)],
+    )
+    def test_the_configured_grace_is_what_bounds_the_render_subprocess(
+        self, unresponsive_chromium, monkeypatch, grace, at_least, at_most
+    ):
+        # The stand-in browser never finishes starting, so the Node wrapper runs until
+        # the Python side stops it: the elapsed time is the deadline that was actually
+        # applied. Both windows exclude a run bounded by the recovery timeout alone and
+        # a run bounded by a headroom baked into the call.
+        monkeypatch.setenv("H_MATH_NORMALIZE_TIMEOUT", "1")
+        monkeypatch.setenv("H_MATH_NORMALIZE_SHUTDOWN_GRACE", grace)
+        monkeypatch.setenv("H_CHROMIUM_PATH", unresponsive_chromium)
+
+        started = time.perf_counter()
+        with pytest.raises(MathRecoveryError):
+            _render_html_quote("http://127.0.0.1:1/nowhere.html", "a selection")
+        elapsed = time.perf_counter() - started
+
+        assert at_least < elapsed < at_most
+
+    def test_a_malformed_grace_fails_the_render_path_as_a_recovery_failure(
+        self, monkeypatch
+    ):
+        monkeypatch.setenv("H_MATH_NORMALIZE_SHUTDOWN_GRACE", "a moment")
+
+        with pytest.raises(MathRecoveryError) as failure:
+            _render_html_quote("http://127.0.0.1:1/nowhere.html", "a selection")
+
+        assert "H_MATH_NORMALIZE_SHUTDOWN_GRACE" in str(failure.value)
+        assert "a moment" in str(failure.value)
+
+    @pytest.fixture
+    def unresponsive_chromium(self):
+        return str(Path(__file__).with_name("unresponsive_chromium.sh"))

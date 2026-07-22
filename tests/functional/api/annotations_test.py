@@ -522,6 +522,39 @@ class TestPostAnnotation:
         UUID(res.json["diagnostic_id"])
         assert db_session.query(Annotation).count() == before
 
+    def test_a_malformed_recovery_timeout_is_a_structured_failure(
+        self, app, db_session, user_with_token, monkeypatch
+    ):
+        # A deployment that set H_MATH_NORMALIZE_TIMEOUT to something that is not a
+        # number is a misconfiguration, and must reach the operator as the service's
+        # structured math-recovery failure -- diagnostic id, retryable flag, and the
+        # offending setting named -- not as an opaque internal error raised from
+        # whichever line happened to convert the value.
+        monkeypatch.setenv("H_MATH_NORMALIZE_TIMEOUT", "half a minute")
+        _, token = user_with_token
+        headers = {"Authorization": f"Bearer {token.value}"}
+        annotation = {
+            "group": "__world__",
+            "text": "My annotation",
+            "uri": "http://example.com",
+            "target": _QUOTE_TARGET,
+        }
+        before = db_session.query(Annotation).count()
+
+        res = app.post_json(
+            "/api/annotations", annotation, headers=headers, expect_errors=True
+        )
+
+        assert res.status_code == 500
+        assert res.json["code"] == "math_normalization_failed"
+        assert res.json["retryable"] is True
+        UUID(res.json["diagnostic_id"])
+        # The operator has to be able to tell which setting they got wrong and what it
+        # was holding; both are named in the failure.
+        assert "H_MATH_NORMALIZE_TIMEOUT" in res.json["reason"]
+        assert "half a minute" in res.json["reason"]
+        assert db_session.query(Annotation).count() == before
+
 
 class TestPatchAnnotation:
     def test_it_updates_annotation_if_authorized(

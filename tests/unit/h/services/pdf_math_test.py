@@ -299,3 +299,75 @@ def test_trim_to_quote_raises_when_the_leading_prose_cannot_be_located():
     ocr = "entirely different opening words $\\omega$ some finite data attached"
     with pytest.raises(MathRecoveryError, match="trim"):
         pdf_math._trim_to_quote(ocr, exact)  # noqa: SLF001
+
+
+class TestRecoveryTimeoutSetting:
+    """A misconfigured recovery timeout is an operator mistake, not an internal fault.
+
+    ``H_MATH_NORMALIZE_TIMEOUT`` is required deployment configuration. When it holds
+    something that is not a number, the recovery must fail with the service's own
+    structured failure -- the one the API error view renders with a diagnostic id --
+    rather than with a generic conversion error raised from wherever the value happened
+    to be used. The two operator mistakes (nothing set, something wrong set) surface as
+    different failures, because they call for different fixes.
+    """
+
+    def test_a_malformed_timeout_fails_the_ocr_path_as_a_recovery_failure(
+        self, monkeypatch
+    ):
+        monkeypatch.setenv("MATHPIX_API_KEY", "test-key")
+        monkeypatch.setenv("H_MATH_NORMALIZE_TIMEOUT", "half a minute")
+
+        with pytest.raises(MathRecoveryError) as failure:
+            pdf_math.ocr_latex(b"\x89PNG")
+
+        assert "H_MATH_NORMALIZE_TIMEOUT" in str(failure.value)
+        assert "half a minute" in str(failure.value)
+
+    def test_a_malformed_timeout_fails_the_pdf_fetch_path_as_a_recovery_failure(
+        self, monkeypatch
+    ):
+        # The fetch is the other consumer of the setting; it must be validated there too,
+        # and before any network call is attempted with a nonsense timeout.
+        monkeypatch.setenv("H_MATH_NORMALIZE_TIMEOUT", "-")
+
+        with pytest.raises(MathRecoveryError) as failure:
+            pdf_math.clean_pdf_quote(
+                "http://test.invalid/never-fetched.pdf", 0, "a quote to recover"
+            )
+
+        assert "H_MATH_NORMALIZE_TIMEOUT" in str(failure.value)
+
+    def test_an_absent_timeout_and_a_malformed_one_are_different_failures(
+        self, monkeypatch
+    ):
+        monkeypatch.setenv("MATHPIX_API_KEY", "test-key")
+
+        monkeypatch.delenv("H_MATH_NORMALIZE_TIMEOUT", raising=False)
+        with pytest.raises(MathRecoveryError) as absent:
+            pdf_math.ocr_latex(b"\x89PNG")
+
+        monkeypatch.setenv("H_MATH_NORMALIZE_TIMEOUT", "thirty")
+        with pytest.raises(MathRecoveryError) as malformed:
+            pdf_math.ocr_latex(b"\x89PNG")
+
+        assert type(absent.value) is not type(malformed.value)
+
+    def test_a_valid_timeout_leaves_the_recovery_working(self, monkeypatch):
+        # The paired positive: a well-formed setting is accepted and the recovery runs
+        # through to its normal result.
+        monkeypatch.setenv("H_MATH_NORMALIZE_TIMEOUT", "12.5")
+        doc = _doc_with_lines([(100, "the residue is some finite data attached here")])
+        uri = "http://test.invalid/valid-timeout.pdf"
+        pdf_math._pdf_cache[uri] = doc.tobytes()  # noqa: SLF001 - seeded bytes, no network
+        monkeypatch.setattr(
+            pdf_math,
+            "ocr_latex",
+            lambda _png: r"the residue is $\omega$ some finite data attached",
+        )
+
+        result = pdf_math.clean_pdf_quote(
+            uri, 0, "the residue is some finite data attached"
+        )
+
+        assert result == r"the residue is $\omega$ some finite data attached"
