@@ -1,3 +1,5 @@
+import http.server
+import threading
 from datetime import UTC, datetime
 from unittest import mock
 from unittest.mock import sentinel
@@ -6,7 +8,11 @@ from urllib.parse import quote
 import pytest
 
 from h.models import AnnotationNormalized
-from h.services.normalization import NormalizationService, factory
+from h.services.normalization import (
+    NormalizationService,
+    _html_source_extract,
+    factory,
+)
 from h.services.pdf_math import MathRecoveryError
 
 
@@ -316,6 +322,59 @@ class TestNormalize:
     @pytest.fixture
     def ocr_latex(self, patch):
         return patch("h.services.normalization.ocr_latex")
+
+
+class TestHtmlSourceExtractRealBoundary:
+    """Exercise the actual Node extractor subprocess -- no wrapper is patched.
+
+    These are the only tests that cross the ``subprocess.run`` boundary: argument
+    marshalling, the exit-code protocol (0 + output = recovered, 0 + empty = legitimate
+    miss, non-zero = hard failure -> ``MathRecoveryError``), and the real KaTeX/linkedom
+    reconstruction against a real local HTTP server.
+    """
+
+    def test_recovers_math_from_a_real_page_over_real_http(self, page_url):
+        result = _html_source_extract(page_url, "let x2 be a square")
+
+        assert result == "let $x^{2}$ be a square"
+
+    def test_mathless_selection_is_returned_unchanged(self, page_url):
+        assert _html_source_extract(page_url, "this is prose") == "this is prose"
+
+    def test_a_selection_not_on_the_page_is_a_miss_not_a_failure(self, page_url):
+        assert _html_source_extract(page_url, "text not on the page") == ""
+
+    def test_an_unfetchable_page_raises_instead_of_reporting_a_miss(self):
+        # Exit-code 1 from the script (fetch failed) must surface as a recovery failure,
+        # never be conflated with the empty-output "selection not found" signal.
+        with pytest.raises(MathRecoveryError, match="html-normalize failed"):
+            _html_source_extract("http://127.0.0.1:1/nowhere.html", "anything")
+
+    @pytest.fixture
+    def page_url(self):
+        page = (
+            b"<html><body><main><p>let "
+            b'<span class="math inline">\\(x^{2}\\)</span>'
+            b" be a square and this is prose.</p></main></body></html>"
+        )
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html")
+                self.end_headers()
+                self.wfile.write(page)
+
+            def log_message(self, *_args):
+                """Keep test output quiet; assertions cover the behavior."""
+
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        yield f"http://127.0.0.1:{server.server_address[1]}/page.html"
+        server.shutdown()
+        thread.join()
+        server.server_close()
 
 
 class TestResolvePdfUrl:

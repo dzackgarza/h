@@ -18,14 +18,14 @@ import { parseHTML } from 'linkedom';
 
 import { strip } from './spacing.mjs';
 
+// Any unexpected KaTeX/DOM failure propagates to main()'s catch and exits non-zero: a
+// broken extractor must surface as a hard failure, never masquerade as the empty-output
+// "selection not found" signal that routes the caller to OCR (hypothesis-review#7).
+// Bad TeX itself is tolerated (throwOnError: false renders it as error markup).
 function renderText(tex, displayMode) {
-  try {
-    const html = katex.renderToString(tex, { displayMode, throwOnError: false, output: 'html' });
-    const { document } = parseHTML(`<div id="k">${html}</div>`);
-    return strip(document.getElementById('k').textContent || '');
-  } catch {
-    return '';
-  }
+  const html = katex.renderToString(tex, { displayMode, throwOnError: false, output: 'html' });
+  const { document } = parseHTML(`<div id="k">${html}</div>`);
+  return strip(document.getElementById('k').textContent || '');
 }
 
 async function main() {

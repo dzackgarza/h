@@ -71,7 +71,11 @@ async function main() {
   const [uri, exact, timeoutRaw] = process.argv.slice(2);
   if (!uri || !exact) throw new Error('usage: ocr.mjs <uri> <exact> [timeout-ms]');
   const timeout = Number(timeoutRaw || 30000);
-  const browser = await chromium.launch({ executablePath: '/bin/chromium', headless: true });
+  // playwright-core bundles no browser; the deployment must name its Chromium binary.
+  // A missing path is a hard failure (exit 1 -> MathRecoveryError), never a silent skip.
+  const executablePath = process.env.H_CHROMIUM_PATH;
+  if (!executablePath) throw new Error('H_CHROMIUM_PATH is not set; cannot render the selection');
+  const browser = await chromium.launch({ executablePath, headless: true });
   try {
     const page = await browser.newPage({
       viewport: { width: 1440, height: 1000 },
