@@ -30,7 +30,9 @@ function renderText(tex, displayMode) {
 
 async function main() {
   const [uri, exact] = process.argv.slice(2);
-  if (!uri || !exact) return '';
+  // Missing arguments are a caller bug: exit non-zero rather than emit the empty
+  // string, which is the legitimate "selection not found -> OCR fallback" signal.
+  if (!uri || !exact) throw new Error('usage: index.mjs <uri> <exact>');
   const html = await fetch(uri).then(r => r.text());
   const { document } = parseHTML(html);
 

@@ -223,14 +223,17 @@ def clean_pdf_quote(
     except fitz.FileDataError as exc:  # corrupt / non-PDF bytes
         msg = f"PDF at {uri!r} could not be opened: {exc}"
         raise MathRecoveryError(msg) from exc
-    if not 0 <= page_index < doc.page_count:
-        msg = f"PDF page {page_index} is out of range (0..{doc.page_count - 1})"
-        raise MathRecoveryError(msg)
-    rect = _quote_rect(doc[page_index], exact, prefix=prefix, suffix=suffix)
-    if rect is None:
-        msg = "PDF region could not be located for the quote"
-        raise MathRecoveryError(msg)
-    png = doc[page_index].get_pixmap(dpi=_DPI, clip=rect).tobytes("png")
+    # The document is closed on every exit path (the context manager covers the raising
+    # ones too); leaking handles would exhaust file descriptors in a long-lived worker.
+    with doc:
+        if not 0 <= page_index < doc.page_count:
+            msg = f"PDF page {page_index} is out of range (0..{doc.page_count - 1})"
+            raise MathRecoveryError(msg)
+        rect = _quote_rect(doc[page_index], exact, prefix=prefix, suffix=suffix)
+        if rect is None:
+            msg = "PDF region could not be located for the quote"
+            raise MathRecoveryError(msg)
+        png = doc[page_index].get_pixmap(dpi=_DPI, clip=rect).tobytes("png")
     ocr = ocr_latex(png)
     if not ocr.strip():
         msg = "OCR returned empty output for the PDF region"

@@ -243,7 +243,12 @@ class NormalizationService:
             .order_by(Annotation.created)
         )
         count = 0
-        for annotation in self._session.scalars(statement):
+        # Stream in batches: the candidate set (every annotation without a valid row) can
+        # exceed memory if fetched eagerly, and a SQL LIMIT cannot be used because the
+        # identity-method skip below filters after the query.
+        for annotation in self._session.scalars(
+            statement.execution_options(yield_per=100)
+        ):
             normalized = annotation.normalized
             if (
                 normalized is not None
