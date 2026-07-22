@@ -37,9 +37,16 @@ class MathRecoveryError(Exception):
 def recovery_timeout() -> float:
     """Seconds before a recovery call (Mathpix OCR, the Node extractor) is abandoned.
 
-    Env-configurable via ``H_MATH_NORMALIZE_TIMEOUT`` (default 30); exceeding it raises.
+    ``H_MATH_NORMALIZE_TIMEOUT`` is required configuration -- the declared value lives in
+    the deployment env / tox env, never as a code-level fallback that silently applies
+    when the variable is unset (POLICY.NO_HIDDEN_CONFIG). A missing value fails the
+    recovery loudly, which rolls the create back.
     """
-    return float(os.environ.get("H_MATH_NORMALIZE_TIMEOUT", "30"))
+    value = os.environ.get("H_MATH_NORMALIZE_TIMEOUT")
+    if not value:
+        msg = "H_MATH_NORMALIZE_TIMEOUT is not set; math recovery cannot run"
+        raise MathRecoveryError(msg)
+    return float(value)
 
 
 def _norm(text: str) -> str:

@@ -1,4 +1,6 @@
 import http.server
+import os
+import shutil
 import threading
 from datetime import UTC, datetime
 from unittest import mock
@@ -11,6 +13,7 @@ from h.models import AnnotationNormalized
 from h.services.normalization import (
     NormalizationService,
     _html_source_extract,
+    _render_html_quote,
     factory,
 )
 from h.services.pdf_math import MathRecoveryError
@@ -409,3 +412,63 @@ class TestFactory:
 
         assert isinstance(svc, NormalizationService)
         assert svc._session == request.db  # noqa: SLF001
+
+
+class TestRenderHtmlQuoteRealBoundary:
+    """Exercise the real ocr.mjs subprocess: Playwright-driven Chromium screenshots.
+
+    Requires ``H_CHROMIUM_PATH`` (the deployment contract); the rendered-region capture
+    is the recovery path for source-less HTML math, so its subprocess boundary gets the
+    same non-mock coverage as the extractor's.
+    """
+
+    @pytest.mark.usefixtures("chromium")
+    def test_captures_a_png_of_the_selection_region(self, page_url):
+        png = _render_html_quote(page_url, "a selection to capture")
+
+        assert png[:8] == b"\x89PNG\r\n\x1a\n"
+        assert len(png) > 100  # a real image, not a stub
+
+    @pytest.mark.usefixtures("chromium")
+    def test_a_selection_not_on_the_page_is_a_hard_failure(self, page_url):
+        with pytest.raises(MathRecoveryError, match="could not be located"):
+            _render_html_quote(page_url, "text that is not on the page")
+
+    def test_a_missing_chromium_path_is_a_hard_failure(self, page_url, monkeypatch):
+        monkeypatch.delenv("H_CHROMIUM_PATH", raising=False)
+        with pytest.raises(MathRecoveryError, match="H_CHROMIUM_PATH"):
+            _render_html_quote(page_url, "a selection to capture")
+
+    @pytest.fixture
+    def chromium(self, monkeypatch):
+        path = os.environ.get("H_CHROMIUM_PATH") or shutil.which("chromium")
+        if not path:
+            msg = "no Chromium available for the ocr.mjs real-boundary test"
+            raise RuntimeError(msg)
+        monkeypatch.setenv("H_CHROMIUM_PATH", path)
+        return path
+
+    @pytest.fixture
+    def page_url(self):
+        page = (
+            b"<html><body><main><p>some prose and then "
+            b"a selection to capture inside the paragraph.</p></main></body></html>"
+        )
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html")
+                self.end_headers()
+                self.wfile.write(page)
+
+            def log_message(self, *_args):
+                """Keep test output quiet; assertions cover the behavior."""
+
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        yield f"http://127.0.0.1:{server.server_address[1]}/page.html"
+        server.shutdown()
+        thread.join()
+        server.server_close()

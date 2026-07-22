@@ -288,6 +288,11 @@ class NormalizationService:
 
     def _recover_html(self, uri: str, quote: str) -> tuple[str, str]:
         """Reconstruct HTML math from the page source; fall back to OCR of the region."""
+        if not uri:
+            # Guard before spawning subprocesses: with no page URI there is nothing to
+            # fetch, so failing here beats two doomed extractor/OCR launches.
+            msg = "annotation has no target URI to recover HTML math from"
+            raise MathRecoveryError(msg)
         source = _html_source_extract(uri, quote)
         if source:
             if source == quote:
