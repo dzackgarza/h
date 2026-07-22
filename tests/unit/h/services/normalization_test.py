@@ -55,6 +55,59 @@ class TestNormalize:
         assert failed.normalized is None
         assert recovered.normalized.method == "identity"
 
+    def test_reconcile_repairs_invalid_existing_normalizations(
+        self,
+        svc,
+        html_source_extract,
+        clean_pdf_quote,
+        factories,
+        db_session,
+    ):
+        raw_html = self.annotation(
+            factories, "the moduli M here", "https://ex.com/math"
+        )
+        factories.AnnotationNormalized(
+            annotation=raw_html,
+            normalized_quote="the moduli M here",
+            method="raw",
+        )
+        pdf_identity = self.annotation(
+            factories,
+            "Let OK have field of fractions K",
+            "https://ex.com/paper.pdf",
+            page=1,
+        )
+        factories.AnnotationNormalized(
+            annotation=pdf_identity,
+            normalized_quote="Let OK have field of fractions K",
+            method="identity",
+        )
+        valid_html_identity = self.annotation(
+            factories, "ordinary prose", "https://ex.com/prose"
+        )
+        factories.AnnotationNormalized(
+            annotation=valid_html_identity,
+            normalized_quote="ordinary prose",
+            method="identity",
+        )
+        db_session.flush()
+        html_source_extract.return_value = r"the moduli $\mathcal M$ here"
+        clean_pdf_quote.return_value = r"Let $O_K$ have field of fractions $K$"
+
+        result = svc.reconcile_missing()
+        db_session.flush()
+
+        assert result.normalized == 2
+        assert result.failures == []
+        assert raw_html.normalized.normalized_quote == r"the moduli $\mathcal M$ here"
+        assert raw_html.normalized.method == "html"
+        assert (
+            pdf_identity.normalized.normalized_quote
+            == r"Let $O_K$ have field of fractions $K$"
+        )
+        assert pdf_identity.normalized.method == "ocr"
+        assert valid_html_identity.normalized.method == "identity"
+
     def test_mathless_html_annotation_is_its_own_normalized_quote(
         self, svc, factories, db_session
     ):
@@ -143,10 +196,13 @@ class TestNormalize:
         assert row.method == "ocr"
         assert row in db_session
 
-    def test_mathless_pdf_annotation_is_its_own_normalized_quote(
+    def test_every_pdf_annotation_is_ocred_even_if_selected_glyphs_look_like_prose(
         self, svc, clean_pdf_quote, factories, db_session
     ):
-        exact = "parameterizes the same surfaces, with finite data attached"
+        exact = "Let OK be a DVR with field of fractions K and residue field k"
+        clean_pdf_quote.return_value = (
+            r"Let $O_K$ be a DVR with field of fractions $K$ and residue field $k$"
+        )
         annotation = self.annotation(
             factories, exact, "https://ex.com/paper.pdf", page=3
         )
@@ -154,10 +210,15 @@ class TestNormalize:
         row = svc.normalize(annotation)
         db_session.flush()
 
-        assert row.normalized_quote == exact
-        assert row.method == "identity"
+        clean_pdf_quote.assert_called_once_with(
+            "https://ex.com/paper.pdf", 3, exact, prefix="", suffix=""
+        )
+        assert (
+            row.normalized_quote
+            == r"Let $O_K$ be a DVR with field of fractions $K$ and residue field $k$"
+        )
+        assert row.method == "ocr"
         assert row in db_session
-        clean_pdf_quote.assert_not_called()
 
     def test_pdf_recovery_failure_propagates_and_adds_no_row(
         self, svc, clean_pdf_quote, factories, db_session
