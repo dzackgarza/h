@@ -280,3 +280,22 @@ def test_quote_rect_is_not_shifted_by_punctuation_only_page_words():
 
     assert rect is not None
     assert "argument" in page.get_textbox(rect)  # the final word is inside the crop
+
+
+def test_trim_to_quote_cuts_leading_overcapture():
+    # Found by the live Mathpix proof: the crop is full column width, so its first line
+    # can begin before the selection; the quote's leading prose marks where to start,
+    # symmetric with the trailing cut.
+    exact = "the residue is some finite data attached"
+    ocr = "An earlier sentence ends here. the residue is $\\omega$ some finite data attached"
+    assert (
+        pdf_math._trim_to_quote(ocr, exact)  # noqa: SLF001
+        == "the residue is $\\omega$ some finite data attached"
+    )
+
+
+def test_trim_to_quote_raises_when_the_leading_prose_cannot_be_located():
+    exact = "the residue is some finite data attached"
+    ocr = "entirely different opening words $\\omega$ some finite data attached"
+    with pytest.raises(MathRecoveryError, match="trim"):
+        pdf_math._trim_to_quote(ocr, exact)  # noqa: SLF001
