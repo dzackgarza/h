@@ -1,0 +1,134 @@
+{
+ "16ff147a143c9571bcaa30b08d58e532e67e44dbfbd5062f628f1403dd313f90": {
+  "body": {
+   "auto_rotate_confidence": 5.137868255844502e-11,
+   "auto_rotate_degrees": 0,
+   "confidence": 1,
+   "confidence_rate": 1,
+   "image_height": 81,
+   "image_width": 1110,
+   "is_handwritten": false,
+   "is_printed": true,
+   "request_id": "55d48760-c490-45cb-a059-09019ad88247",
+   "text": "A geometric interpretation of these cusps is as follows. Let $\\mathcal{X} \\rightarrow(C, 0)$ be a Kulikov model and consider the completed period mapping",
+   "version": "SuperNet-200"
+  },
+  "selection": "prose_across_two_lines"
+ },
+ "31bf6328081ae692af1784e585abe3e37cdd25420290d809c43b1fac7cde766c": {
+  "body": {
+   "auto_rotate_confidence": 2.767105655721025e-08,
+   "auto_rotate_degrees": 0,
+   "confidence": 1,
+   "confidence_rate": 1,
+   "image_height": 66,
+   "image_width": 1031,
+   "is_handwritten": false,
+   "is_printed": true,
+   "latex_styled": "\\text { satisfy } 2 K \\sim 0 \\text { and } q=0 \\text { and occupy a place somewhere in between rational }",
+   "request_id": "e2792b6d-400e-461e-b3a4-a266d2265cb3",
+   "text": "satisfy $2 K \\sim 0$ and $q=0$ and occupy a place somewhere in between rational",
+   "version": "SuperNet-200"
+  },
+  "selection": "begins_in_math"
+ },
+ "5837b8bdcad3ffb0f9fcd647239b62de40dd5d2d3c3d57167f69f20127a7255e": {
+  "body": {
+   "auto_rotate_confidence": 5.1717083984466686e-14,
+   "auto_rotate_degrees": 0,
+   "confidence": 0.8586037158966064,
+   "confidence_rate": 0.9983075693859041,
+   "image_height": 179,
+   "image_width": 1110,
+   "is_handwritten": false,
+   "is_printed": true,
+   "request_id": "8ab520dd-9e89-42eb-a6ab-961337cf6c7f",
+   "text": "Figure 3. Cusp diagram of $F_{(10,10,0)}$, for $T_{\\mathrm{En}}=U \\oplus U(2) \\oplus E_{8}(2)$\n\nA geometric interpretation of these cusps is as follows. Let $\\mathcal{X} \\rightarrow(C, 0)$ be a Kulikov model and consider the completed period mapping",
+   "version": "SuperNet-200"
+  },
+  "selection": "figure_caption"
+ },
+ "d083dd376f9dd6e6b346c389741e3f61a5f10db901ac0de20053bdba3e1fc6e7": {
+  "body": {
+   "auto_rotate_confidence": 1.248237822437659e-06,
+   "auto_rotate_degrees": 0,
+   "confidence": 0.896269910470437,
+   "confidence_rate": 0.9989957919674857,
+   "image_height": 72,
+   "image_width": 1110,
+   "is_handwritten": false,
+   "is_printed": true,
+   "latex_styled": "\\text { surfaces }(Z, \\mathcal{M}) \\text { with a } 2 \\text {-divisible polarization } \\mathcal{M}=\\mathcal{L}_{Z}^{\\otimes 2} \\in \\operatorname{Pic} Z \\text { of degree 8. The }",
+   "request_id": "c0838ca3-aa4e-495e-8dc8-cfbf0c83256f",
+   "text": "surfaces $(Z, \\mathcal{M})$ with a 2 -divisible polarization $\\mathcal{M}=\\mathcal{L}_{Z}^{\\otimes 2} \\in \\operatorname{Pic} Z$ of degree 8. The",
+   "version": "SuperNet-200"
+  },
+  "selection": "spans_a_math_line_break"
+ },
+ "dd1c34c8dee13de75af120c96b0fe6500262bfc9a83b10d957a18cd0b8375122": {
+  "body": {
+   "auto_rotate_confidence": 2.4121596386983413e-10,
+   "auto_rotate_degrees": 0,
+   "confidence": 0.99951171875,
+   "confidence_rate": 0.9999957896597419,
+   "image_height": 103,
+   "image_width": 1110,
+   "is_handwritten": false,
+   "is_printed": true,
+   "request_id": "17597964-6b18-47ca-ab7d-a41536cb93bb",
+   "text": "In this paper we consider the moduli space $F_{\\mathrm{En}, 2}$ of pairs $\\left(Z,\\left[\\mathcal{L}_{Z}\\right]\\right)$, where $Z$ is an Enriques surface with $A D E$ singularities and $\\left[\\mathcal{L}_{Z}\\right] \\in \\operatorname{Pic} Z / \\mathbb{Z}_{2}$ is an ample numerical",
+   "version": "SuperNet-200"
+  },
+  "selection": "two_lines_inline_math"
+ },
+ "e970909c5b33f4fc3c7585caa3ddc7e357f6315d335828c218649c737ed760e5": {
+  "body": {
+   "auto_rotate_confidence": 3.943077461765476e-11,
+   "auto_rotate_degrees": 0,
+   "confidence": 1,
+   "confidence_rate": 1,
+   "image_height": 44,
+   "image_width": 1073,
+   "is_handwritten": false,
+   "is_printed": true,
+   "latex_styled": "\\text { Enriques surfaces are quotients of K3 surfaces by basepoint free involutions. }",
+   "request_id": "a9f2abd3-ab0b-4b6f-b8db-38cc9da521a9",
+   "text": "Enriques surfaces are quotients of K3 surfaces by basepoint free involutions.",
+   "version": "SuperNet-200"
+  },
+  "selection": "prose_only"
+ },
+ "f08e1f3e540bb40dfff74431d42d8af896d538857582f5b42b0c80101fa5a2d8": {
+  "body": {
+   "auto_rotate_confidence": 1.4047129345134968e-13,
+   "auto_rotate_degrees": 0,
+   "confidence": 0.4327049255371094,
+   "confidence_rate": 0.9922735293001137,
+   "image_height": 118,
+   "image_width": 1110,
+   "is_handwritten": false,
+   "is_printed": true,
+   "request_id": "c5d79f0a-a42d-4844-ae44-1cc058501b0a",
+   "text": "cover $\\rho: Z \\rightarrow W$ to a quartic del Pezzo surface with $4 A_{1}$ or $A_{3}+2 A_{1}$ singularities. The ramification divisor $R_{Z} \\in|\\mathcal{M}|$ of $\\rho$ is ample and the pair ( $Z, \\epsilon R_{Z}$ ) is $\\log$ canonical for any $0<\\epsilon \\ll 1$. Thus, the moduli space $F_{\\mathrm{En}, 2}$ admits a geometric,",
+   "version": "SuperNet-200"
+  },
+  "selection": "symbol_dips_into_the_line_below"
+ },
+ "f7a59a68ba6b6f45cb420d20d08480da638a9ccbe319fa155cb88f52e7e151de": {
+  "body": {
+   "auto_rotate_confidence": 1.1569240010445014e-10,
+   "auto_rotate_degrees": 0,
+   "confidence": 0.9421544075012207,
+   "confidence_rate": 0.999255451023079,
+   "image_height": 72,
+   "image_width": 771,
+   "is_handwritten": false,
+   "is_printed": true,
+   "latex_styled": "\\text { surfaces }(Z, \\mathcal{M}) \\text { with a } 2 \\text {-divisible polarization } \\mathcal{M}=\\mathcal{L}_{Z}^{\\otimes 2}",
+   "request_id": "57e1d4b3-d15f-48e1-957b-28cceb87095e",
+   "text": "surfaces $(Z, \\mathcal{M})$ with a 2 -divisible polarization $\\mathcal{M}=\\mathcal{L}_{Z}^{\\otimes 2}$",
+   "version": "SuperNet-200"
+  },
+  "selection": "ends_in_math"
+ }
+}
