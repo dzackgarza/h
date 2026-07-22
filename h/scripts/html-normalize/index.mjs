@@ -16,8 +16,7 @@
 import katex from 'katex';
 import { parseHTML } from 'linkedom';
 
-const SPACING = /[​‌‍⁠﻿   ]/g;
-const strip = s => (s || '').replace(SPACING, '');
+import { strip } from './spacing.mjs';
 
 function renderText(tex, displayMode) {
   try {

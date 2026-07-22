@@ -38,8 +38,7 @@ def reindex(ctx):
     if errored_ids:
         for annotation_id in sorted(errored_ids):
             click.echo(f"failed\t{annotation_id}", err=True)
-        raise click.ClickException(
-            f"{len(errored_ids)} annotation(s) failed to reindex"
-        )
+        msg = f"{len(errored_ids)} annotation(s) failed to reindex"
+        raise click.ClickException(msg)
 
     click.echo("reindexed every annotation")

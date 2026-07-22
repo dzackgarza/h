@@ -31,6 +31,7 @@ from h.services import AnnotationWriteService, NormalizationService
 from h.views.api.config import api_config
 from h.views.api.helpers.json_payload import json_payload
 
+
 @api_config(
     versions=["v1", "v2"],
     route_name="api.search",

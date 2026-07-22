@@ -15,6 +15,5 @@ def normalize_annotations(ctx, limit):
     if result.failures:
         for annotation_id, reason in result.failures:
             click.echo(f"failed\t{annotation_id}\t{reason}", err=True)
-        raise click.ClickException(
-            f"{len(result.failures)} annotation(s) remain incorrectly normalized"
-        )
+        msg = f"{len(result.failures)} annotation(s) remain incorrectly normalized"
+        raise click.ClickException(msg)

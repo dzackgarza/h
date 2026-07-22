@@ -342,14 +342,6 @@ def _target_description(targets) -> str | None:
     return None
 
 
-def has_text_quote(selectors) -> bool:
-    """Whether the selectors carry a non-empty ``TextQuoteSelector`` (a text selection)."""
-    return any(
-        selector.get("type") == "TextQuoteSelector" and selector.get("exact")
-        for selector in (selectors or [])
-    )
-
-
 class SearchParamsSchema(colander.Schema):
     _separate_replies = colander.SchemaNode(
         colander.Boolean(),

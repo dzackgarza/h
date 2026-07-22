@@ -46,9 +46,7 @@ class TestReindexCommand:
         )
         assert result.output == "reindexed every annotation\n"
 
-    def test_reports_failed_annotation_ids(
-        self, cli, cliconfig, pyramid_request, patch
-    ):
+    def test_reports_failed_annotation_ids(self, cli, cliconfig, patch):
         batch_indexer = patch("h.cli.commands.search.BatchIndexer").return_value
         batch_indexer.index.return_value = {"ann-2", "ann-1"}
 

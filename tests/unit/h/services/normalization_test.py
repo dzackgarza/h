@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from unittest import mock
 from unittest.mock import sentinel
 from urllib.parse import quote
@@ -22,9 +22,7 @@ class TestNormalize:
             normalized_quote="already normalized",
             method="identity",
         )
-        factories.Annotation(
-            target_uri="https://ex.com/reply", target_selectors=[]
-        )
+        factories.Annotation(target_uri="https://ex.com/reply", target_selectors=[])
         db_session.flush()
 
         assert svc.normalize_missing() == 1
@@ -38,9 +36,11 @@ class TestNormalize:
         self, svc, html_source_extract, factories, db_session
     ):
         failed = self.annotation(factories, "unrecoverable math", "https://ex.com/a")
-        failed.created = datetime(2026, 1, 1)
-        recovered = self.annotation(factories, "plain existing prose", "https://ex.com/b")
-        recovered.created = datetime(2026, 1, 2)
+        failed.created = datetime(2026, 1, 1, tzinfo=UTC)
+        recovered = self.annotation(
+            factories, "plain existing prose", "https://ex.com/b"
+        )
+        recovered.created = datetime(2026, 1, 2, tzinfo=UTC)
         db_session.flush()
         html_source_extract.side_effect = [
             MathRecoveryError("source unavailable"),
@@ -155,7 +155,9 @@ class TestNormalize:
         row = svc.normalize(annotation)
         db_session.flush()
 
-        render_html_quote.assert_called_once_with("https://ex.com/p", "the space M here")
+        render_html_quote.assert_called_once_with(
+            "https://ex.com/p", "the space M here"
+        )
         ocr_latex.assert_called_once_with(b"rendered selection PNG")
         assert row.normalized_quote == r"the space $\mathcal{M}$ here"
         assert row.method == "ocr"
@@ -313,7 +315,7 @@ class TestNormalize:
 
     @pytest.fixture
     def ocr_latex(self, patch):
-        return patch("h.services.normalization._ocr_latex")
+        return patch("h.services.normalization.ocr_latex")
 
 
 class TestResolvePdfUrl:

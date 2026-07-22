@@ -18,7 +18,7 @@ import base64
 import os
 import re
 
-import fitz  # pymupdf
+import pymupdf as fitz  # `pymupdf` is the typed canonical name; `fitz` the legacy alias
 import requests
 
 _DPI = 220  # render resolution of the cropped region; reads cleanly for Mathpix
@@ -56,12 +56,12 @@ def _projected_bounds(forms: list[str], words: list[str]) -> tuple[int, int] | N
     if not words:
         return None
 
-    def anchor(window_start: int, window_end: int, project_end: bool) -> int | None:
+    def anchor(window_start: int, window_end: int, *, project_end: bool) -> int | None:
         window = words[window_start:window_end]
         for size in range(min(6, len(window)), 0, -1):
-            for offset in range(0, len(window) - size + 1):
+            for offset in range(len(window) - size + 1):
                 needle = window[offset : offset + size]
-                for page_start in range(0, len(forms) - size + 1):
+                for page_start in range(len(forms) - size + 1):
                     if forms[page_start : page_start + size] != needle:
                         continue
                     word_offset = window_start + offset
@@ -137,7 +137,7 @@ def _trim_to_quote(ocr: str, exact: str) -> str:
     return ocr.strip()
 
 
-def _ocr_latex(png: bytes) -> str:
+def ocr_latex(png: bytes) -> str:
     """Mathpix OCR of a PNG -> its text with math rendered as ``$…$`` LaTeX.
 
     Every failure of the OCR round-trip -- a missing key, a network error, a non-2xx
@@ -213,7 +213,7 @@ def clean_pdf_quote(
         msg = "PDF region could not be located for the quote"
         raise MathRecoveryError(msg)
     png = doc[page_index].get_pixmap(dpi=_DPI, clip=rect).tobytes("png")
-    latex = _trim_to_quote(_ocr_latex(png), exact)
+    latex = _trim_to_quote(ocr_latex(png), exact)
     if not latex:
         msg = "OCR returned empty output for the PDF region"
         raise MathRecoveryError(msg)

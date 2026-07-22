@@ -11,7 +11,7 @@ positions: a real boundary, no network, no OCR.
 
 from __future__ import annotations
 
-import fitz
+import pymupdf as fitz
 import pytest
 import requests
 
@@ -151,7 +151,7 @@ def test_clean_pdf_quote_returns_the_ocr_latex(monkeypatch):
     pdf_math._pdf_cache[uri] = doc.tobytes()  # noqa: SLF001 - seed fetch cache: real bytes, no network
     monkeypatch.setattr(
         pdf_math,
-        "_ocr_latex",
+        "ocr_latex",
         lambda _png: r"the residue is $\omega$ some finite data attached",
     )
 
@@ -183,7 +183,7 @@ def test_clean_pdf_quote_raises_when_ocr_is_empty(monkeypatch):
     doc = _doc_with_lines([(100, "the residue is some finite data attached here")])
     uri = "http://test.invalid/empty.pdf"
     pdf_math._pdf_cache[uri] = doc.tobytes()  # noqa: SLF001
-    monkeypatch.setattr(pdf_math, "_ocr_latex", lambda _png: "")
+    monkeypatch.setattr(pdf_math, "ocr_latex", lambda _png: "")
     with pytest.raises(MathRecoveryError, match="empty"):
         pdf_math.clean_pdf_quote(uri, 0, "the residue is some finite data attached")
 
@@ -192,7 +192,7 @@ def test_ocr_latex_raises_math_recovery_error_when_key_missing(monkeypatch):
     # A missing key is a recovery failure (rolls the create back), not a leaked config error.
     monkeypatch.delenv("MATHPIX_API_KEY", raising=False)
     with pytest.raises(MathRecoveryError, match="MATHPIX_API_KEY"):
-        pdf_math._ocr_latex(b"\x89PNG")  # noqa: SLF001
+        pdf_math.ocr_latex(b"\x89PNG")
 
 
 def test_ocr_latex_wraps_mathpix_request_failure(monkeypatch):
@@ -201,8 +201,9 @@ def test_ocr_latex_wraps_mathpix_request_failure(monkeypatch):
     monkeypatch.setenv("MATHPIX_API_KEY", "test-key")
 
     def _boom(*_args, **_kwargs):
-        raise requests.ConnectionError("mathpix unreachable")
+        msg = "mathpix unreachable"
+        raise requests.ConnectionError(msg)
 
     monkeypatch.setattr(pdf_math.requests, "post", _boom)
     with pytest.raises(MathRecoveryError, match="Mathpix OCR request failed"):
-        pdf_math._ocr_latex(b"\x89PNG")  # noqa: SLF001
+        pdf_math.ocr_latex(b"\x89PNG")

@@ -2,9 +2,11 @@
 
 import { chromium } from 'playwright-core';
 
+import { SPACING } from './spacing.mjs';
+
 async function selectionRect(page, exact) {
-  return page.evaluate(needleRaw => {
-    const spacing = /[​‌‍⁠﻿   ]/g;
+  return page.evaluate(({ needleRaw, spacingSource }) => {
+    const spacing = new RegExp(spacingSource, 'g');
     const clean = value => (value || '').replace(spacing, '');
     const nodes = [];
     let rendered = '';
@@ -62,7 +64,7 @@ async function selectionRect(page, exact) {
       width: right - left + 2 * paddingX,
       height: bottom - top + 2 * paddingY,
     };
-  }, exact);
+  }, { needleRaw: exact, spacingSource: SPACING.source });
 }
 
 async function main() {

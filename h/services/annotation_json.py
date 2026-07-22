@@ -215,6 +215,7 @@ class AnnotationJSONService:
 
         return annotation.moderation_status.value
 
+
 def factory(_context, request):
     return AnnotationJSONService(
         annotation_read_service=request.find_service(AnnotationReadService),

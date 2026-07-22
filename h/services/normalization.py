@@ -17,10 +17,12 @@ from __future__ import annotations
 
 import base64
 import logging
+import shutil
 import subprocess
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 from sqlalchemy import or_, orm, select
 
@@ -28,8 +30,8 @@ from h.models import Annotation, AnnotationNormalized
 from h.models.document import DocumentURI
 from h.services.pdf_math import (
     MathRecoveryError,
-    _ocr_latex,
     clean_pdf_quote,
+    ocr_latex,
     recovery_timeout,
 )
 
@@ -49,12 +51,31 @@ class ReconciliationResult:
     failures: list[tuple[str, str]]
 
 
+def _node_path() -> str:
+    """Absolute path of the ``node`` executable, or a loud recovery failure.
+
+    Node runs both recovery scripts; a deployment without it cannot normalize anything,
+    so its absence is a ``MathRecoveryError`` (rolling the create back), never a silent
+    skip.
+    """
+    node = shutil.which("node")
+    if not node:
+        msg = "node executable not found; HTML math recovery is unavailable"
+        raise MathRecoveryError(msg)
+    return node
+
+
+def _selectors(annotation: Annotation) -> list[dict]:
+    """Return the annotation's target selectors as a list (legacy ``Column`` typing)."""
+    return cast("list[dict]", annotation.target_selectors or [])
+
+
 def _page_index(annotation: Annotation) -> int | None:
     """Read the 0-based page from a ``PageSelector``, or ``None`` for a non-PDF annotation.
 
     This is what routes an annotation to PDF OCR rather than HTML math recovery.
     """
-    for selector in annotation.target_selectors or []:
+    for selector in _selectors(annotation):
         if isinstance(selector, dict) and selector.get("type") == "PageSelector":
             index = selector.get("index")
             if isinstance(index, int):
@@ -63,7 +84,7 @@ def _page_index(annotation: Annotation) -> int | None:
 
 
 def _quote_context(annotation: Annotation) -> tuple[str, str]:
-    for selector in annotation.target_selectors or []:
+    for selector in _selectors(annotation):
         if isinstance(selector, dict) and selector.get("type") == "TextQuoteSelector":
             return (selector.get("prefix", ""), selector.get("suffix", ""))
     return ("", "")
@@ -80,7 +101,7 @@ def _html_source_extract(uri: str, exact: str) -> str:
     """
     try:
         result = subprocess.run(  # noqa: S603 - fixed script path, args are data
-            ["node", str(_HTML_NORMALIZE), uri, exact],  # noqa: S607
+            [_node_path(), str(_HTML_NORMALIZE), uri, exact],
             capture_output=True,
             text=True,
             timeout=recovery_timeout(),
@@ -101,7 +122,7 @@ def _render_html_quote(uri: str, exact: str) -> bytes:
     try:
         result = subprocess.run(  # noqa: S603 - fixed script path, args are data
             [
-                "node",
+                _node_path(),
                 str(_HTML_RENDER),
                 uri,
                 exact,
@@ -276,7 +297,7 @@ class NormalizationService:
 
     def _ocr_html_region(self, uri: str, quote: str) -> str:
         """OCR a source-less HTML selection from a backend Chromium rendering."""
-        recovered = _ocr_latex(_render_html_quote(uri, quote))
+        recovered = ocr_latex(_render_html_quote(uri, quote))
         if not recovered:
             msg = "OCR returned empty output for the rendered HTML selection"
             raise MathRecoveryError(msg)
