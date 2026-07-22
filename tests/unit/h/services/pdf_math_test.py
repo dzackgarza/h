@@ -264,3 +264,19 @@ def test_fetch_pdf_evicts_the_oldest_entry_beyond_the_cache_bound():
         server.shutdown()
         thread.join()
         server.server_close()
+
+
+def test_quote_rect_is_not_shifted_by_punctuation_only_page_words():
+    # Found by the live Mathpix proof: a page word with no alphanumeric core (the "=" in
+    # the formula) stays in the page-word index while quote tokenization drops it, so the
+    # tail projection landed one word short and the crop cut the quote's final word.
+    doc = _doc_with_lines(
+        [(100, "The residue theorem gives X = 2 which completes the argument here.")]
+    )
+    page = doc[0]
+    exact = "The residue theorem gives X = 2 which completes the argument"
+
+    rect = pdf_math._quote_rect(page, exact)  # noqa: SLF001
+
+    assert rect is not None
+    assert "argument" in page.get_textbox(rect)  # the final word is inside the crop
