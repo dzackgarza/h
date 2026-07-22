@@ -14,6 +14,10 @@ reaches a browser (``tests/corpus/pages``):
   annotates).
 * ``mathjax-category-theory.html`` -- Pandoc ``<span class="math">`` holding ``\(..\)``,
   typeset in the browser by MathJax v3, with the page's own macro definitions.
+* ``mathjax-stackexchange.html`` and ``mathjax-mathoverflow.html`` -- a real Mathematics
+  Stack Exchange question and a real MathOverflow thread, where the author's TeX sits in
+  the page as plain ``$..$`` text with no markup around it at all and MathJax typesets it
+  in the reader's browser.
 * ``katex-docusaurus.html`` -- KaTeX rendered server-side: visible spans beside hidden
   MathML carrying the TeX.
 * ``plain-about.html`` -- prose, no mathematics anywhere.
@@ -56,6 +60,22 @@ MATHEMATICS = {
     "mathjax_inline_math": [r"V^* = n", r"V^* \cong R^n"],
     "mathjax_custom_macro": [r"V\dual"],
     "mathjax_display_math": ["0+1 &= 1+0 = 1"],
+    "stackexchange_question_with_inline_math": [
+        r"$C[0,1]$",
+        r"d(f,g)=\sup_x |f(x)-g(x)|",
+        r"\mathbb R",
+    ],
+    "stackexchange_answer_across_paragraphs": [r"$C[0,1]$", r"\mathbb{R}^n"],
+    "stackexchange_only_an_inline_formula": [r"$C[0,1]$"],
+    "mathoverflow_paragraph_around_a_displayed_formula": [
+        r"\int_0^\infty x \, [J_0(x)]^5 \, dx",
+        r"\Gamma(1/15)",
+    ],
+    "mathoverflow_only_a_displayed_formula": [
+        r"\int_0^\infty x \, [J_0(x)]^5 \, dx",
+        r"\Gamma(14/15)",
+    ],
+    "mathoverflow_only_an_inline_formula": [r"K(a,b; p) = \sum_{x=1}^{p-1}"],
     "katex_inline_math": [r"f\colon[a,b] \to \R", "\n" + r"\int_{a}^{x} f(t)\,dt"],
     "katex_display_math": [r"\int_0^{2\pi} \sin(x)\,dx"],
     "katex_prose_only": [],
@@ -72,6 +92,10 @@ INVISIBLE_TO_THE_READER = {
     "ar5iv_drag_through_a_commutative_diagram": ["superscript"],
     "katex_inline_math": ["f:[a,b]→R"],
     "katex_display_math": ["sin(x)dx"],
+    # MathJax repeats every formula three times over in the DOM -- its own rendering, a
+    # preview, and the TeX in a script tag -- and all three are in what the client sends.
+    "stackexchange_question_with_inline_math": ["C[0,1]C[0,1]"],
+    "mathoverflow_only_a_displayed_formula": ["Γ(1/15)"],
 }
 
 pytestmark = pytest.mark.usefixtures("init_elasticsearch")
@@ -84,7 +108,7 @@ class TestAnnotatingAMathematicalWebPage:
     ):
         response = app.post_json(
             "/api/annotations",
-            _annotation(page_url(drag), SELECTIONS[drag]["exact"]),
+            _annotation(page_url(drag), SELECTIONS[drag]),
             headers=token_auth_header,
         )
 
@@ -103,7 +127,7 @@ class TestAnnotatingAMathematicalWebPage:
         # TeX in front of it.
         response = app.post_json(
             "/api/annotations",
-            _annotation(page_url(drag), SELECTIONS[drag]["exact"]),
+            _annotation(page_url(drag), SELECTIONS[drag]),
             headers=token_auth_header,
         )
 
@@ -118,7 +142,7 @@ class TestAnnotatingAMathematicalWebPage:
 
         response = app.post_json(
             "/api/annotations",
-            _annotation(page_url("plain_prose"), exact),
+            _annotation(page_url("plain_prose"), SELECTIONS["plain_prose"]),
             headers=token_auth_header,
         )
 
@@ -131,7 +155,7 @@ class TestAnnotatingAMathematicalWebPage:
         # nothing. It is the most common thing a reader does, and it still has to be
         # readable in the sidebar, so it is recovered like any other.
         drag = "ar5iv_prose_and_inline_math"
-        payload = _annotation(page_url(drag), SELECTIONS[drag]["exact"])
+        payload = _annotation(page_url(drag), SELECTIONS[drag])
         payload["text"] = ""
 
         response = app.post_json("/api/annotations", payload, headers=token_auth_header)
@@ -148,7 +172,7 @@ class TestAnnotatingAMathematicalWebPage:
         drag = "ar5iv_paragraph_of_definitions"
         created = app.post_json(
             "/api/annotations",
-            _annotation(page_url(drag), SELECTIONS[drag]["exact"]),
+            _annotation(page_url(drag), SELECTIONS[drag]),
             headers=token_auth_header,
         )
 
@@ -167,7 +191,7 @@ class TestAnnotatingAMathematicalWebPage:
         drag = "katex_inline_math"
         created = app.post_json(
             "/api/annotations",
-            _annotation(page_url(drag), SELECTIONS[drag]["exact"]),
+            _annotation(page_url(drag), SELECTIONS[drag]),
             headers=token_auth_header,
         )
 
@@ -197,17 +221,25 @@ class TestAnnotatingAMathematicalWebPage:
         assert db_session.query(Annotation).count() == before
 
 
-def _annotation(uri: str, exact: str) -> dict:
-    """Build the payload the client posts for a drag a reader made over a web page."""
+def _annotation(uri: str, drag: dict | str) -> dict:
+    """Build the payload the client posts for a drag a reader made over a web page.
+
+    A recorded drag brings the context the client sends with it; a bare string is a
+    selection with none, which is what a stale or invented selector looks like.
+    """
+    selector = {"type": "TextQuoteSelector"}
+    if isinstance(drag, str):
+        selector["exact"] = drag
+    else:
+        selector |= {
+            "exact": drag["exact"],
+            "prefix": drag["prefix"],
+            "suffix": drag["suffix"],
+        }
     return {
         "uri": uri,
         "text": "an annotation",
-        "target": [
-            {
-                "source": uri,
-                "selector": [{"type": "TextQuoteSelector", "exact": exact}],
-            }
-        ],
+        "target": [{"source": uri, "selector": [selector]}],
     }
 
 

@@ -1,50 +1,110 @@
 {
   "ar5iv_prose_and_inline_math": {
     "page": "ar5iv-enriques.html",
-    "exact": "Enriques surfaces are quotients of K3 surfaces by basepoint free\ninvolutions. They satisfy 2​K∼0similar-to2𝐾02K\\sim 0 and q=0𝑞0q=0 and occupy a place\nsomewhere in between rational and K3 surfaces. Unlike K3 surfaces,\nthere are only finitely many moduli spaces of polarized Enriques surfaces, see\n[GH16]. Each of them parameterizes the\nsame surfaces, with some finite data attached."
+    "exact": "Enriques surfaces are quotients of K3 surfaces by basepoint free\ninvolutions. They satisfy 2​K∼0similar-to2𝐾02K\\sim 0 and q=0𝑞0q=0 and occupy a place\nsomewhere in between rational and K3 surfaces. Unlike K3 surfaces,\nthere are only finitely many moduli spaces of polarized Enriques surfaces, see\n[GH16]. Each of them parameterizes the\nsame surfaces, with some finite data attached.",
+    "prefix": "\n\n\n1. Introduction\n\n\n",
+    "suffix": "\n\n\nIn this paper we consider the"
   },
   "ar5iv_paragraph_of_definitions": {
     "page": "ar5iv-enriques.html",
-    "exact": "In this paper we consider the moduli space FEn,2subscript𝐹En2F_{\\rm En,2} of pairs\n(Z,[ℒZ])𝑍delimited-[]subscriptℒ𝑍(Z,[{\\mathcal{L}}_{Z}]), where Z𝑍Z is an Enriques surface with A​D​E𝐴𝐷𝐸ADE\nsingularities and [ℒZ]∈Pic⁡Z/ℤ2delimited-[]subscriptℒ𝑍Pic𝑍subscriptℤ2[{\\mathcal{L}}_{Z}]\\in\\operatorname{Pic}Z/{\\mathbb{Z}}_{2} is an ample numerical\npolarization of degree 222. Equivalently, this is the moduli space of\nA​D​E𝐴𝐷𝐸ADE Enriques surfaces (Z,ℳ)𝑍ℳ(Z,{\\mathcal{M}}) with a 222-divisible polarization\nℳ=ℒZ⊗2∈Pic⁡Zℳsuperscriptsubscriptℒ𝑍tensor-productabsent2Pic𝑍{\\mathcal{M}}={\\mathcal{L}}_{Z}^{\\otimes 2}\\in\\operatorname{Pic}Z of degree 888.\nThe Baily-Borel compactification F¯En,2BBsuperscriptsubscript¯𝐹En2BB{\\overline{F}}_{\\rm En,2}^{\\rm BB} of this space was\ndescribed by Sterk [Ste91]."
+    "exact": "In this paper we consider the moduli space FEn,2subscript𝐹En2F_{\\rm En,2} of pairs\n(Z,[ℒZ])𝑍delimited-[]subscriptℒ𝑍(Z,[{\\mathcal{L}}_{Z}]), where Z𝑍Z is an Enriques surface with A​D​E𝐴𝐷𝐸ADE\nsingularities and [ℒZ]∈Pic⁡Z/ℤ2delimited-[]subscriptℒ𝑍Pic𝑍subscriptℤ2[{\\mathcal{L}}_{Z}]\\in\\operatorname{Pic}Z/{\\mathbb{Z}}_{2} is an ample numerical\npolarization of degree 222. Equivalently, this is the moduli space of\nA​D​E𝐴𝐷𝐸ADE Enriques surfaces (Z,ℳ)𝑍ℳ(Z,{\\mathcal{M}}) with a 222-divisible polarization\nℳ=ℒZ⊗2∈Pic⁡Zℳsuperscriptsubscriptℒ𝑍tensor-productabsent2Pic𝑍{\\mathcal{M}}={\\mathcal{L}}_{Z}^{\\otimes 2}\\in\\operatorname{Pic}Z of degree 888.\nThe Baily-Borel compactification F¯En,2BBsuperscriptsubscript¯𝐹En2BB{\\overline{F}}_{\\rm En,2}^{\\rm BB} of this space was\ndescribed by Sterk [Ste91].",
+    "prefix": "th some finite data attached.\n\n\n",
+    "suffix": "\n\n\nBy the classification of big "
   },
   "ar5iv_theorem_statement": {
     "page": "ar5iv-enriques.html",
-    "exact": "The normalization of F¯En,2subscript¯𝐹En2{\\overline{F}}_{\\rm En,2} is a semitoroidal\ncompactification F¯En,2𝔉superscriptsubscript¯𝐹En2𝔉{\\overline{F}}_{\\rm En,2}^{\\mathfrak{F}}\ncorresponding to a collection\n𝔉={𝔉k}k=1,2,3,4,5𝔉subscriptsuperscript𝔉𝑘𝑘12345{\\mathfrak{F}}=\\{{\\mathfrak{F}}^{k}\\}_{k=1,2,3,4,5} of explicit semifans, one\nfor each 00-cusp of FEn,2subscript𝐹En2F_{\\rm En,2}, and it is dominated by a toroidal\ncompactification F¯En,2coxsuperscriptsubscript¯𝐹En2cox{\\overline{F}}_{\\rm En,2}^{\\rm cox} for a collection\n𝔉cox={𝔉coxk}k=1,2,3,4,5subscript𝔉coxsubscriptsubscriptsuperscript𝔉𝑘cox𝑘12345{\\mathfrak{F}}_{\\rm cox}=\\{{\\mathfrak{F}}^{k}_{\\rm cox}\\}_{k=1,2,3,4,5} of Coxeter fans."
+    "exact": "The normalization of F¯En,2subscript¯𝐹En2{\\overline{F}}_{\\rm En,2} is a semitoroidal\ncompactification F¯En,2𝔉superscriptsubscript¯𝐹En2𝔉{\\overline{F}}_{\\rm En,2}^{\\mathfrak{F}}\ncorresponding to a collection\n𝔉={𝔉k}k=1,2,3,4,5𝔉subscriptsuperscript𝔉𝑘𝑘12345{\\mathfrak{F}}=\\{{\\mathfrak{F}}^{k}\\}_{k=1,2,3,4,5} of explicit semifans, one\nfor each 00-cusp of FEn,2subscript𝐹En2F_{\\rm En,2}, and it is dominated by a toroidal\ncompactification F¯En,2coxsuperscriptsubscript¯𝐹En2cox{\\overline{F}}_{\\rm En,2}^{\\rm cox} for a collection\n𝔉cox={𝔉coxk}k=1,2,3,4,5subscript𝔉coxsubscriptsubscriptsuperscript𝔉𝑘cox𝑘12345{\\mathfrak{F}}_{\\rm cox}=\\{{\\mathfrak{F}}^{k}_{\\rm cox}\\}_{k=1,2,3,4,5} of Coxeter fans.",
+    "prefix": "ction 5.2, is\n\n\n\nTheorem 1.1.\n\n\n",
+    "suffix": "\n\n\n\nIn Sections 6, 7 we describe"
   },
   "ar5iv_drag_through_a_commutative_diagram": {
     "page": "ar5iv-enriques.html",
-    "exact": "Consider a surface Y=ℙ1×ℙ1𝑌superscriptℙ1superscriptℙ1Y={\\mathbb{P}}^{1}\\times{\\mathbb{P}}^{1} with an involution\nτ:(x,y)→(−x,−y):𝜏→𝑥𝑦𝑥𝑦\\tau\\colon(x,y)\\to(-x,-y) and quotient W=Y/τ𝑊𝑌𝜏W=Y/\\tau. Let\nB∈|−2​KY|𝐵2subscript𝐾𝑌B\\in|-2K_{Y}| be a τ𝜏\\tau-invariant divisor with at worst A​D​E𝐴𝐷𝐸ADE\nsingularities not passing through the four points with\nx,y∈{0,∞}𝑥𝑦0x,y\\in\\{0,\\infty\\} fixed by τ𝜏\\tau. The double cover\nπ:X→Y:𝜋→𝑋𝑌\\pi\\colon X\\to Y branched in B𝐵B is a K3 surface with a del\nPezzo involution ιdPsubscript𝜄dP\\iota_{{\\rm dP}} so that Y=X/ιdP𝑌𝑋subscript𝜄dPY=X/\\iota_{{\\rm dP}}. The involution\nτ𝜏\\tau on Y𝑌Y lifts to a basepoint-free Enriques involution\nιEnsubscript𝜄En\\iota_{{\\rm En}} on X𝑋X commuting with ιdPsubscript𝜄dP\\iota_{{\\rm dP}} and the quotient Z=X/ιEn𝑍𝑋subscript𝜄EnZ=X/\\iota_{{\\rm En}} is an\nEnriques surface. The second lift of τ𝜏\\tau is a Nikulin involution\nand the quotient Z′=X/ιNiksuperscript𝑍′𝑋subscript𝜄NikZ^{\\prime}=X/\\iota_{{\\rm Nik}} is a K3 surface with eight A1subscript𝐴1A_{1}\nsingularities and possibly more. This gives the following commutative\ndiagram:\n\n\n\n(1)\n\nX𝑋{X}Z𝑍{Z}Z′superscript𝑍′{Z^{\\prime}}Y𝑌{Y}W𝑊{W}π𝜋\\scriptstyle{\\pi}ψ𝜓\\scriptstyle{\\psi}ψ′superscript𝜓′\\scriptstyle{\\psi^{\\prime}}ρ𝜌\\scriptstyle{\\rho}ρ′superscript𝜌′\\scriptstyle{\\rho^{\\prime}}φ𝜑\\scriptstyle{\\varphi}\n\n\n"
+    "exact": "Consider a surface Y=ℙ1×ℙ1𝑌superscriptℙ1superscriptℙ1Y={\\mathbb{P}}^{1}\\times{\\mathbb{P}}^{1} with an involution\nτ:(x,y)→(−x,−y):𝜏→𝑥𝑦𝑥𝑦\\tau\\colon(x,y)\\to(-x,-y) and quotient W=Y/τ𝑊𝑌𝜏W=Y/\\tau. Let\nB∈|−2​KY|𝐵2subscript𝐾𝑌B\\in|-2K_{Y}| be a τ𝜏\\tau-invariant divisor with at worst A​D​E𝐴𝐷𝐸ADE\nsingularities not passing through the four points with\nx,y∈{0,∞}𝑥𝑦0x,y\\in\\{0,\\infty\\} fixed by τ𝜏\\tau. The double cover\nπ:X→Y:𝜋→𝑋𝑌\\pi\\colon X\\to Y branched in B𝐵B is a K3 surface with a del\nPezzo involution ιdPsubscript𝜄dP\\iota_{{\\rm dP}} so that Y=X/ιdP𝑌𝑋subscript𝜄dPY=X/\\iota_{{\\rm dP}}. The involution\nτ𝜏\\tau on Y𝑌Y lifts to a basepoint-free Enriques involution\nιEnsubscript𝜄En\\iota_{{\\rm En}} on X𝑋X commuting with ιdPsubscript𝜄dP\\iota_{{\\rm dP}} and the quotient Z=X/ιEn𝑍𝑋subscript𝜄EnZ=X/\\iota_{{\\rm En}} is an\nEnriques surface. The second lift of τ𝜏\\tau is a Nikulin involution\nand the quotient Z′=X/ιNiksuperscript𝑍′𝑋subscript𝜄NikZ^{\\prime}=X/\\iota_{{\\rm Nik}} is a K3 surface with eight A1subscript𝐴1A_{1}\nsingularities and possibly more. This gives the following commutative\ndiagram:\n\n\n\n(1)\n\nX𝑋{X}Z𝑍{Z}Z′superscript𝑍′{Z^{\\prime}}Y𝑌{Y}W𝑊{W}π𝜋\\scriptstyle{\\pi}ψ𝜓\\scriptstyle{\\psi}ψ′superscript𝜓′\\scriptstyle{\\psi^{\\prime}}ρ𝜌\\scriptstyle{\\rho}ρ′superscript𝜌′\\scriptstyle{\\rho^{\\prime}}φ𝜑\\scriptstyle{\\varphi}\n\n\n",
+    "prefix": "he main diagram, general case\n\n\n",
+    "suffix": "\n\n\n\n\n"
   },
   "mathjax_prose_only": {
     "page": "mathjax-category-theory.html",
-    "exact": "This is meant to be a relatively short and non-rigorous introduction to Category Theory. Although I will be defining and using a lot of the technical terminology that is commonly used, this talk is primarily aimed at introducing these concepts, why they exist, and where they’re useful and commonly used."
+    "exact": "This is meant to be a relatively short and non-rigorous introduction to Category Theory. Although I will be defining and using a lot of the technical terminology that is commonly used, this talk is primarily aimed at introducing these concepts, why they exist, and where they’re useful and commonly used.",
+    "prefix": "Introductory Notes\n\n\nDisclaimer\n",
+    "suffix": "\nIn fact, most of the results us"
   },
   "mathjax_inline_math": {
     "page": "mathjax-category-theory.html",
-    "exact": "In particular, we have dim V∗=n, so V∗≅Rn≅V. So V is isomorphic to its dual."
+    "exact": "In particular, we have dim V∗=n, so V∗≅Rn≅V. So V is isomorphic to its dual.",
+    "prefix": "ble (as vector spaces) from Rn.\n",
+    "suffix": "\nBut V∗ is a vector space in its"
   },
   "mathjax_custom_macro": {
     "page": "mathjax-category-theory.html",
-    "exact": "So V is isomorphic to V∨, and it is also isomorphic to V∨∨. \nHowever, when one goes through the process of actually finding and constructing these bijections, one finds that the map from V→V∨ depends on choosing a basis for V. On the other hand, the map from V to V∨∨ requires no such choice. In this way, we say that V is isomorphic to its dual, but V is naturally isomorphic to it’s double dual. This idea of “naturality” is part of what category theory sets out to make precise."
+    "exact": "So V is isomorphic to V∨, and it is also isomorphic to V∨∨. \nHowever, when one goes through the process of actually finding and constructing these bijections, one finds that the map from V→V∨ depends on choosing a basis for V. On the other hand, the map from V to V∨∨ requires no such choice. In this way, we say that V is isomorphic to its dual, but V is naturally isomorphic to it’s double dual. This idea of “naturality” is part of what category theory sets out to make precise.",
+    "prefix": " isomorphic to its double dual.\n",
+    "suffix": "\nA secondary motivation was to a"
   },
   "mathjax_display_math": {
     "page": "mathjax-category-theory.html",
-    "exact": "\n\n0+1=1+0=10+0=1+1=0\n"
+    "exact": "\n\n0+1=1+0=10+0=1+1=0\n",
+    "prefix": "{0,1}) with the group operation\n",
+    "suffix": "\n\n\n\n\n"
+  },
+  "stackexchange_question_with_inline_math": {
+    "page": "mathjax-stackexchange.html",
+    "exact": "I know that C[0,1]C[0,1]C[0,1], as a topological space induced by the metric d(f,g)=supx|f(x)−g(x)|d(f,g)=supx|f(x)−g(x)|d(f,g)=\\sup_x |f(x)-g(x)|, is Hausdorff, second countable, and has cardinality same as RR\\mathbb R. But is it a manifold?",
+    "prefix": "egingroup\n    \n                \n",
+    "suffix": "\n\nBy manifold, I mean a topologi"
+  },
+  "stackexchange_answer_across_paragraphs": {
+    "page": "mathjax-stackexchange.html",
+    "exact": "I know that C[0,1]C[0,1]C[0,1], as a topological space induced by the metric d(f,g)=supx|f(x)−g(x)|d(f,g)=supx|f(x)−g(x)|d(f,g)=\\sup_x |f(x)-g(x)|, is Hausdorff, second countable, and has cardinality same as RR\\mathbb R. But is it a manifold?\n\nBy manifold, I mean a topological space that is Hausdorff and second countable. The chart map from an open neighbourhood of a point in C[0,1]C[0,1]C[0,1] to a open nnn dimensional euclidean space. Is C[0,1]C[0,1]C[0,1] a manifold? What is the dimension? \n    \n\n            \n                \n                    \n                        \n                        functional-analysismanifoldsbanach-spacesnormed-spaces\n                    \n                \n            \n\n    \n        \n            \n                \n\n\n\n\n    \n\n        \n            Share\n        \n\n            \n                Cite\n            \n\n\n                \n                    \n                        Follow\n                        \n                    \n                \n\n\n\n\n\n\n    \n    \n\n\n            \n\n                \n\n    \n        \n            edited Jan 4, 2016 at 6:57\n        \n        \n    \n    \n        \n    \n    \n        user147263\n        \n            \n        \n    \n\n                \n\n                \n                    \n    \n        \n            asked Nov 30, 2015 at 15:53\n        \n        \n    \n    \n        \n    \n    \n        JSCB\n        \n            13.9k1515 gold badges6969 silver badges128128 bronze badges\n        \n    \n\n\n\n                \n        \n    \n    \\endgroup\n\n\n\n\n\n            \n\n7\n\t\n        \n            \n\n                    \n    \n        \n            \n                    1\n            \n        \n        \n            \n                \\begingroup\n                It is a complete normed space, so I guess that it is trivially a manifold.\n                \\endgroup\n                \n                    Siminore\n– \n                        Siminore\n                \n                2015-11-30 15:55:41 +00:00\n                \n                    Commented\n                    Nov 30, 2015 at 15:55\n                \n            \n        \n    \n        \n            \n            \n    \n    \n\n\n        \n    \n        \n            \n                    2\n            \n        \n        \n            \n                \\begingroup\n                What definition do you take for a manifold?\n                \\endgroup\n                \n                    mathcounterexamples.net\n– \n                        mathcounterexamples.net\n                \n                2015-11-30 15:56:33 +00:00\n                \n                    Commented\n                    Nov 30, 2015 at 15:56\n                \n            \n        \n    \n    \n        \n            \n                    3\n            \n        \n        \n            \n                \\begingroup\n                manifold over what space? Points have no neighborhoods that are finite-dimensional. You could think of if as a manifold, but not over RnRn\\mathbb R^n for any finite nnn.\n                \\endgroup\n                \n                    Mirko\n– \n                        Mirko\n                \n                2015-11-30 16:06:31 +00:00\n                \n                    Commented\n                    Nov 30, 2015 at 16:06\n                \n            \n        \n    \n    \n        \n            \n                    1\n            \n        \n        \n            \n                \\begingroup\n                As pointed out by @Siminore, it's a Banach manifold (modeled over the Banach space C[0,1]C[0,1]C[0,1]). You can do differential geometry also in the infinite dimensional case, though you have to be careful with some statements which are considered trivial in finite dimensions (like the statement that every linear functional is continous or that every finite dimenstional vector space is isomorphic to it's dual).\n                \\endgroup\n                \n                    Thomas\n– \n                        Thomas\n                \n                2015-11-30 16:32:52 +00:00\n                \n                    Commented\n                    Nov 30, 2015 at 16:32\n                \n                        \n                            \n            \n        \n    \n    \n        \n            \n            \n        \n        \n            \n                \\begingroup\n                @Thomas Sure. However I imagine that you take for atlas the one having a single chart equal to (C[0,1],Id)(C[0,1],Id)(C[0,1],Id) which doesn't provide a manifold having much different properties than C[0,1]C[0,1]C[0,1] itself!\n                \\endgroup\n                \n                    mathcounterexamples.net\n– \n                        mathcounterexamples.net\n                \n                2015-11-30 16:38:14 +00:00\n                \n                    Commented\n                    Nov 30, 2015 at 16:38\n                \n            \n        \n    \n\n            \n\t    \n\n        \n                    \n                        \n                    \n                 | \n            \n                Show 2 more comments\n            \n                 \n    \n\n    \n\n\n\n\n\n\n\n                \n                        \n                        \n                            \n                                \n                                    \n1 Answer                                        1\n                                    \n                                \n                                \n                                        \n\n\n    \n        \n            Sorted by:\n        \n        \n            Reset to default\n        \n    \n    \n        \n                    \n                        Highest score (default)\n                    \n                    \n                        Date modified (newest first)\n                    \n                    \n                        Date created (oldest first)\n                    \n        \n    \n\n\n\n                                \n                            \n\n\n                        \n                                        \n\n\n        \n                \n                    \n\n        \n            \n        \n        \n2        \n        \n\n            \n        \n\n\n        \n\n    \n\n\n\n\n\n\n\n            \n                \n                    \n            \n\n    \n    \n\n\n\n                \n\n            \n\n\n    \\begingroup\n\n\n    \nAn infinite-dimensional normed space XXX, such as C[0,1]C[0,1]C[0,1] is not a topological manifold over any RnRn\\mathbb{R}^n, because there is no homeomorphism between an open subset U⊂XU⊂XU\\subset X and an open subset  V⊂RnV⊂RnV\\subset \\mathbb{R}^n. To see why, take a compact subset of VVV with nonempty interior; its image in UUU would have to be also be a compact set with nonempty interior. But there are no such sets in XXX, because closed balls are not compact. The latter follows from Riesz' lemma. \n\nFor completeness, I also quote a comment by Thomas: \n\n\n  it's a Banach manifold (modeled over the Banach space C[0,1]C[0,1]C[0,1]). You can do differential geometry also in the infinite dimensional case, though you have to be careful with some statements which are considered trivial in finite dimensions (like the statement that every linear functional is continous or that every finite dimensional vector space is isomorphic to it's dual). -- Thomas\n",
+    "prefix": "egingroup\n    \n                \n",
+    "suffix": "\n    \n    \n        \n\n           "
+  },
+  "stackexchange_only_an_inline_formula": {
+    "page": "mathjax-stackexchange.html",
+    "exact": "C[0,1]C[0,1]",
+    "prefix": "  \n                \nI know that ",
+    "suffix": "C[0,1], as a topological space i"
+  },
+  "mathoverflow_paragraph_around_a_displayed_formula": {
+    "page": "mathjax-mathoverflow.html",
+    "exact": "Numerical calculation with gp (first to the default 38-digit\nprecision, then tripled) supports the conjecture that\n∫∞0x[J0(x)]5dx=Γ(1/15)Γ(2/15)Γ(4/15)Γ(8/15)85–√π4=25–√Γ(7/15)Γ(11/15)Γ(13/15)Γ(14/15)∫0∞x[J0(x)]5dx=Γ(1/15)Γ(2/15)Γ(4/15)Γ(8/15)85π4=25Γ(7/15)Γ(11/15)Γ(13/15)Γ(14/15)\n\\int_0^\\infty x \\, [J_0(x)]^5 \\, dx =\n\\frac{\\Gamma(1/15) \\, \\Gamma(2/15) \\, \\Gamma(4/15) \\, \\Gamma(8/15)}\n  {8\\sqrt{5} \\, \\pi^4}\n= \\frac{2}\n  {\\sqrt{5} \\, \\Gamma(7/15) \\, \\Gamma(11/15) \\, \\Gamma(13/15) \\, \\Gamma(14/15)}\n\n[the two Gamma expressions are easily proved equal via the\nidentity Γ(x)Γ(1−x)=π/sin(πx)Γ(x)Γ(1−x)=π/sin⁡(πx)\\Gamma(x) \\Gamma(1-x) = \\pi / \\sin(\\pi x);\nthe hard part is proving that either of them equals the definite integral].",
+    "prefix": "    \n                \nQUESTION\n\n",
+    "suffix": "\n\nIs this a known formula?\n\nIf n"
+  },
+  "mathoverflow_only_a_displayed_formula": {
+    "page": "mathjax-mathoverflow.html",
+    "exact": "∫∞0x[J0(x)]5dx=Γ(1/15)Γ(2/15)Γ(4/15)Γ(8/15)85–√π4=25–√Γ(7/15)Γ(11/15)Γ(13/15)Γ(14/15)∫0∞x[J0(x)]5dx=Γ(1/15)Γ(2/15)Γ(4/15)Γ(8/15)85π4=25Γ(7/15)Γ(11/15)Γ(13/15)Γ(14/15)",
+    "prefix": "d) supports the conjecture that\n",
+    "suffix": "\n\\int_0^\\infty x \\, [J_0(x)]^5 \\"
+  },
+  "mathoverflow_only_an_inline_formula": {
+    "page": "mathjax-mathoverflow.html",
+    "exact": "K(a,b;p)=∑x=1p−1exp(2πi(ax+bx−1)/p)K(a,b;p)=∑x=1p−1exp⁡(2πi(ax+bx−1)/p)",
+    "prefix": "osterman sums\nto prime modulus,\n",
+    "suffix": "\nK(a,b; p) = \\sum_{x=1}^{p-1} \\e"
   },
   "katex_inline_math": {
     "page": "katex-docusaurus.html",
-    "exact": "Let f ⁣:[a,b]→Rf\\colon[a,b] \\to \\Rf:[a,b]→R be Riemann integrable. Let F ⁣:[a,b]→RF\\colon[a,b]\\to\\RF:[a,b]→R be F(x)=∫axf(t) dtF(x)=\n\\int_{a}^{x} f(t)\\,dtF(x)=∫ax​f(t)dt. Then FFF is continuous, and at all xxx such that fff is continuous at xxx, FFF is differentiable at xxx with F′(x)=f(x)F'(x)=f(x)F′(x)=f(x)."
+    "exact": "Let f ⁣:[a,b]→Rf\\colon[a,b] \\to \\Rf:[a,b]→R be Riemann integrable. Let F ⁣:[a,b]→RF\\colon[a,b]\\to\\RF:[a,b]→R be F(x)=∫axf(t) dtF(x)=\n\\int_{a}^{x} f(t)\\,dtF(x)=∫ax​f(t)dt. Then FFF is continuous, and at all xxx such that fff is continuous at xxx, FFF is differentiable at xxx with F′(x)=f(x)F'(x)=f(x)F′(x)=f(x).",
+    "prefix": "(x)=f(x)$. \nhttp://localhost:3000",
+    "suffix": "\nBlocks​\nFor equation block or d"
   },
   "katex_display_math": {
     "page": "katex-docusaurus.html",
-    "exact": "I=∫02πsin⁡(x) dxI = \\int_0^{2\\pi} \\sin(x)\\,dx\nI=∫02π​sin(x)dx"
+    "exact": "I=∫02πsin⁡(x) dxI = \\int_0^{2\\pi} \\sin(x)\\,dx\nI=∫02π​sin(x)dx",
+    "prefix": "n(x)\\,dx $$ \nhttp://localhost:3000",
+    "suffix": "\nEnabling math equations​\nEnable"
   },
   "katex_prose_only": {
     "page": "katex-docusaurus.html",
-    "exact": "Mathematical equations can be rendered using KaTeX."
+    "exact": "Mathematical equations can be rendered using KaTeX.",
+    "prefix": "10.2On this pageMath Equations\n\n",
+    "suffix": "\nSee below how to activate them."
   },
   "plain_prose": {
     "page": "plain-about.html",
-    "exact": "I am a postdoctoral researcher at the National Center for Theoretical Sciences (NCTS) in Taipei, Taiwan. I completed my PhD at the University of Georgia, where I worked with Valery Alexeev, and I work on compactifications of moduli spaces of complex algebraic surfaces."
+    "exact": "I am a postdoctoral researcher at the National Center for Theoretical Sciences (NCTS) in Taipei, Taiwan. I completed my PhD at the University of Georgia, where I worked with Valery Alexeev, and I work on compactifications of moduli spaces of complex algebraic surfaces.",
+    "prefix": "\n\nAbout\n\n\n",
+    "suffix": "\n\nElsewhere\n\nEmail\nGoogle Schola"
   }
 }

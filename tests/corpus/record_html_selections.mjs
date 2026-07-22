@@ -43,6 +43,45 @@ const DRAGS = [
   { name: 'mathjax_inline_math', page: 'mathjax-category-theory.html', from: 'article > p:nth-of-type(8)' },
   { name: 'mathjax_custom_macro', page: 'mathjax-category-theory.html', from: 'article > p:nth-of-type(10)' },
   { name: 'mathjax_display_math', page: 'mathjax-category-theory.html', from: 'article > p:nth-of-type(21)' },
+  // Stack Exchange: the source carries the author's TeX as plain `$..$` text with no math
+  // markup at all, and MathJax typesets it in the browser. This is where a reader of
+  // mathematics spends their day.
+  {
+    name: 'stackexchange_question_with_inline_math',
+    page: 'mathjax-stackexchange.html',
+    from: '.s-prose p',
+    index: 0,
+  },
+  {
+    name: 'stackexchange_answer_across_paragraphs',
+    page: 'mathjax-stackexchange.html',
+    from: '.js-post-body:nth-of-type(1) p',
+    to: 'blockquote',
+  },
+  {
+    name: 'stackexchange_only_an_inline_formula',
+    page: 'mathjax-stackexchange.html',
+    from: '.MathJax',
+    index: 1,
+  },
+  {
+    name: 'mathoverflow_paragraph_around_a_displayed_formula',
+    page: 'mathjax-mathoverflow.html',
+    from: '.s-prose p',
+    index: 1,
+  },
+  {
+    name: 'mathoverflow_only_a_displayed_formula',
+    page: 'mathjax-mathoverflow.html',
+    from: '.MathJax_Display',
+    index: 0,
+  },
+  {
+    name: 'mathoverflow_only_an_inline_formula',
+    page: 'mathjax-mathoverflow.html',
+    from: '.MathJax',
+    index: 3,
+  },
   // KaTeX rendered server-side: visible spans beside hidden MathML and TeX.
   { name: 'katex_inline_math', page: 'katex-docusaurus.html', from: 'article p', index: 4 },
   { name: 'katex_display_math', page: 'katex-docusaurus.html', from: '.katex-display' },
@@ -72,14 +111,59 @@ async function capture(page, { from, to, index = 0 }) {
     const range = document.createRange();
     range.setStartBefore(first);
     range.setEndAfter(last);
+
     // The client's `renderedTextFromRange`, verbatim: clone the range, turn each `<br>`
     // into a space, take `textContent`.
-    const container = document.createElement('div');
-    container.appendChild(range.cloneContents());
-    for (const br of [...container.querySelectorAll('br')]) {
-      br.replaceWith(document.createTextNode(' '));
+    const rendered = source => {
+      const container = document.createElement('div');
+      container.appendChild(source.cloneContents());
+      for (const br of [...container.querySelectorAll('br')]) {
+        br.replaceWith(document.createTextNode(' '));
+      }
+      return container.textContent || '';
+    };
+
+    // ...and the 32 characters of context either side that it sends with the quote, taken
+    // the same way (the client's `TextQuoteAnchor.fromRange`).
+    const CONTEXT = 32;
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    let offset = 0;
+    let start = null;
+    let end = null;
+    const marks = [];
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      marks.push({ node, start: offset, end: offset + (node.nodeValue || '').length });
+      offset += (node.nodeValue || '').length;
     }
-    return container.textContent || '';
+    const positionOf = (container, containerOffset, atEnd) => {
+      const before = document.createRange();
+      before.setStart(document.body, 0);
+      if (atEnd) before.setEnd(container, containerOffset);
+      else before.setEnd(container, containerOffset);
+      return before.toString().length;
+    };
+    start = positionOf(range.startContainer, range.startOffset, false);
+    end = start + range.toString().length;
+    const at = position => {
+      const mark = marks.find(m => m.end >= position) || marks[marks.length - 1];
+      const clamped = Math.max(mark.start, Math.min(position, mark.end));
+      return { node: mark.node, offset: clamped - mark.start };
+    };
+    const context = (fromPosition, toPosition) => {
+      if (toPosition <= fromPosition) return '';
+      const head = at(fromPosition);
+      const tail = at(toPosition);
+      const contextRange = document.createRange();
+      contextRange.setStart(head.node, head.offset);
+      contextRange.setEnd(tail.node, tail.offset);
+      return rendered(contextRange);
+    };
+
+    return {
+      exact: rendered(range),
+      prefix: context(Math.max(0, start - CONTEXT), start),
+      suffix: context(end, end + CONTEXT),
+    };
   }, { from, to, index });
 }
 
@@ -93,14 +177,17 @@ try {
   for (const drag of DRAGS) {
     const page = await browser.newPage();
     await page.goto(`${origin}/${drag.page}`, { waitUntil: 'networkidle' });
-    // MathJax typesets after load; without this the recording would be the `\(..\)`
-    // source, which is not what any reader can select.
+    // MathJax typesets after load; without this the recording would be the source TeX,
+    // which is not what any reader can select. v3 emits `mjx-container`, v2 (which Stack
+    // Exchange still runs) emits `.MathJax`.
     await page.waitForFunction(
-      () => !window.MathJax || document.querySelector('mjx-container') !== null,
+      () =>
+        !document.querySelector('script[src*="athJax" i], script[src*="athjax" i]') ||
+        document.querySelector('mjx-container, .MathJax, .MathJax_Display') !== null,
       undefined,
-      { timeout: 30000 },
+      { timeout: 60000 },
     );
-    recorded[drag.name] = { page: drag.page, exact: await capture(page, drag) };
+    recorded[drag.name] = { page: drag.page, ...(await capture(page, drag)) };
     await page.close();
   }
 } finally {

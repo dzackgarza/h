@@ -6,9 +6,12 @@ quote is turned into a quote with the rendered math recovered and stored in
 the raw capture is used only for anchoring. The annotation row is never touched.
 
 Recovery is source-first, OCR-fallback, and fail-hard. An HTML page that exposes the math
-source (arXiv LaTeXML, Pandoc ``<span class="math">``) yields the exact authored TeX via the
-bundled Node/KaTeX extractor (``method='html'``); otherwise, and for every PDF region, the
-rendered region is OCR'd with Mathpix (``method='ocr'``). ``method`` is never ``raw``: a
+source -- arXiv LaTeXML, Pandoc ``<span class="math">``, KaTeX markup, or the delimited TeX
+a MathJax page (Stack Exchange, MathOverflow) writes straight into its text -- yields the
+exact authored TeX via the bundled Node extractor (``method='html'``); otherwise, and for
+every PDF region, the rendered region is OCR'd with Mathpix (``method='ocr'``). Source
+recovery is what keeps a paid OCR call off the pages a reader actually spends their day on.
+``method`` is never ``raw``: a
 genuine failure (both source and OCR fail or come back empty) raises ``MathRecoveryError``,
 which rolls the create back so no annotation -- and no raw quote -- is ever persisted.
 """
@@ -91,18 +94,23 @@ def _quote_context(annotation: Annotation) -> tuple[str, str]:
     return ("", "")
 
 
-def _html_source_extract(uri: str, exact: str) -> str:
-    r"""Extract the selection's math from the page's own source via the Node (KaTeX) script.
+def _html_source_extract(
+    uri: str, exact: str, prefix: str = "", suffix: str = ""
+) -> str:
+    r"""Extract the selection's math from the page's own source via the Node script.
 
-    Returns the reconstructed quote (exact authored TeX in ``\(..\)`` / ``$$..$$``), or ``""``
+    Returns the reconstructed quote (exact authored TeX in ``$..$`` / ``$$..$$``), or ``""``
     when the page exposes no recoverable math source for the selection -- the signal for the
     caller to fall back to OCR. Raises ``MathRecoveryError`` on a hard failure (page fetch,
-    parse, a crashed script, or a timeout); KaTeX reproduces the page's MathJax rendering,
-    which pure Python cannot.
+    parse, a crashed script, or a timeout).
+
+    ``prefix`` and ``suffix`` are the context the client captured either side of the
+    selection. They are what locates a selection made over nothing but a formula, which
+    carries no prose of its own to match.
     """
     try:
         result = subprocess.run(  # noqa: S603 - fixed script path, args are data
-            [_node_path(), str(_HTML_NORMALIZE), uri, exact],
+            [_node_path(), str(_HTML_NORMALIZE), uri, exact, prefix, suffix],
             capture_output=True,
             text=True,
             timeout=recovery_timeout(),
@@ -281,7 +289,8 @@ class NormalizationService:
         page = _page_index(annotation)
         if page is not None:  # PDF annotation
             return (self._recover_pdf(annotation, uri, page, quote), "ocr")
-        return self._recover_html(uri, quote)
+        prefix, suffix = _quote_context(annotation)
+        return self._recover_html(uri, quote, prefix, suffix)
 
     def _recover_pdf(
         self, annotation: Annotation, uri: str, page: int, quote: str
@@ -294,14 +303,16 @@ class NormalizationService:
         prefix, suffix = _quote_context(annotation)
         return clean_pdf_quote(url, page, quote, prefix=prefix, suffix=suffix)
 
-    def _recover_html(self, uri: str, quote: str) -> tuple[str, str]:
+    def _recover_html(
+        self, uri: str, quote: str, prefix: str = "", suffix: str = ""
+    ) -> tuple[str, str]:
         """Reconstruct HTML math from the page source; fall back to OCR of the region."""
         if not uri:
             # Guard before spawning subprocesses: with no page URI there is nothing to
             # fetch, so failing here beats two doomed extractor/OCR launches.
             msg = "annotation has no target URI to recover HTML math from"
             raise MathRecoveryError(msg)
-        source = _html_source_extract(uri, quote)
+        source = _html_source_extract(uri, quote, prefix, suffix)
         if source:
             if source == quote:
                 return (quote, "identity")

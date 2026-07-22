@@ -61,14 +61,78 @@ function markFormulas(document) {
   }
 }
 
+// Delimited TeX written straight into the page's text, longest opener first. This is how
+// Stack Exchange, MathOverflow and every other MathJax site ships its mathematics: no
+// markup at all, just the author's TeX between delimiters, typeset in the reader's browser.
+const DELIMITERS = [
+  { open: '$$', close: '$$', display: true, dollar: true },
+  { open: '\\[', close: '\\]', display: true, dollar: false },
+  { open: '\\(', close: '\\)', display: false, dollar: false },
+  { open: '$', close: '$', display: false, dollar: true },
+];
+
+// Tags whose text a reader never reads as mathematics -- MathJax's own `skipTags`.
+const SKIP = new Set(['SCRIPT', 'STYLE', 'CODE', 'PRE', 'KBD', 'SAMP', 'TEXTAREA']);
+
+// Whether `$..$` means mathematics on this page. Only a page that says so in its MathJax
+// config gets dollars read as delimiters; on any other page a price is a price.
+function dollarsAreMath(document) {
+  const loadsMathJax = [...document.querySelectorAll('script')].some(script =>
+    /mathjax/i.test(script.getAttribute('src') || ''),
+  );
+  if (!loadsMathJax) return false;
+  const config = [...document.querySelectorAll('script')]
+    .map(script => script.textContent || '')
+    .join('\n');
+  return /inlineMath[^\]]*\$/.test(config) || /displayMath[^\]]*\$/.test(config);
+}
+
+// Split a text run into prose and the formulas written into it.
+function splitDelimited(text, dollars) {
+  const pieces = [];
+  let prose = '';
+  let i = 0;
+  const escaped = at => at > 0 && text[at - 1] === '\\';
+  while (i < text.length) {
+    const delimiter = DELIMITERS.find(
+      candidate =>
+        (dollars || !candidate.dollar) &&
+        text.startsWith(candidate.open, i) &&
+        !(candidate.dollar && escaped(i)),
+    );
+    let end = -1;
+    if (delimiter) {
+      end = text.indexOf(delimiter.close, i + delimiter.open.length);
+      while (end > 0 && delimiter.dollar && escaped(end)) {
+        end = text.indexOf(delimiter.close, end + 1);
+      }
+    }
+    const tex = end < 0 ? '' : text.slice(i + delimiter.open.length, end).trim();
+    if (!tex) {
+      prose += text[i];
+      i += 1;
+      continue;
+    }
+    if (prose) pieces.push({ text: prose });
+    prose = '';
+    const source = text.slice(i, end + delimiter.close.length);
+    pieces.push({ tex: delimiter.display ? `$$${tex}$$` : `$${tex}$`, source });
+    i = end + delimiter.close.length;
+  }
+  if (prose) pieces.push({ text: prose });
+  return pieces;
+}
+
 // The page as an alternating sequence of prose runs and formulas, in reading order.
-function segmentsOf(root) {
+function segmentsOf(root, dollars) {
   const segments = [];
-  const walk = node => {
+  const walk = (node, inSkipped) => {
     for (const child of node.childNodes) {
       if (child.nodeType === 3) {
         const text = strip(child.textContent || '');
-        if (text) segments.push({ text });
+        if (!text) continue;
+        if (inSkipped) segments.push({ text });
+        else segments.push(...splitDelimited(text, dollars));
       } else if (child.nodeType === 1) {
         // The client turns each `<br>` into a space before capturing (its
         // `renderedTextFromRange`), because block tags carry whitespace in the source and
@@ -79,11 +143,11 @@ function segmentsOf(root) {
         }
         const tex = child.getAttribute && child.getAttribute('data-quote-tex');
         if (tex != null) segments.push({ tex, source: strip(child.textContent || '') });
-        else walk(child);
+        else walk(child, inSkipped || SKIP.has(child.tagName));
       }
     }
   };
-  walk(root);
+  walk(root, false);
   return segments;
 }
 
@@ -163,24 +227,79 @@ function locate(segments, needle) {
 
   // A drag over nothing but a formula carries no prose to anchor it. On a page that ships
   // its mathematics already rendered, the capture is that formula's own text and says which
-  // one it is; where the browser rendered it, nothing in the source resembles the capture
-  // and the caller falls back to OCR of the region.
+  // one it is.
   const formula = segments.find(
     segment => segment.tex !== undefined && segment.source && segment.source.includes(needle),
   );
   return formula ? formula.tex : '';
 }
 
+// Where the page reads on from the prose the client captured just before the selection.
+// A reader who highlights nothing but a formula gives us no prose of their own, but the
+// client sends the 32 characters either side, and on every page those are the author's own
+// words -- so the formula is the one the page has right after them.
+function locateByContext(segments, prefix, suffix) {
+  const lead = strip(prefix).slice(-SYNC);
+  if (!lead.trim()) return '';
+
+  const matches = [];
+  for (let i = 0; i < segments.length; i += 1) {
+    const { text } = segments[i];
+    if (text === undefined || !text.endsWith(lead)) continue;
+    const formulas = formulasAfter(segments, i);
+    if (formulas) matches.push({ index: i, formulas });
+  }
+  if (matches.length === 1) return matches[0].formulas;
+
+  // That prose occurs in more than one place, so the words the client saw after the
+  // selection decide which. They are not always the page's -- what follows a formula in the
+  // capture is often the renderer's own doing -- and when they settle nothing, OCR of the
+  // region is a better answer than a guess at which formula the reader meant.
+  const follows = strip(suffix).slice(0, SYNC).trim();
+  const agreeing = follows
+    ? matches.filter(match => followedBy(segments, match.index, follows))
+    : [];
+  return agreeing.length === 1 ? agreeing[0].formulas : '';
+}
+
+// The formulas the page has immediately after segment `index`, as one quote.
+function formulasAfter(segments, index) {
+  const out = [];
+  for (let k = index + 1; k < segments.length; k += 1) {
+    const segment = segments[k];
+    if (segment.tex !== undefined) {
+      out.push(segment.tex);
+      continue;
+    }
+    // Whitespace between two displayed formulas is part of the selection; the first real
+    // word after them is where the reader let go.
+    if (segment.text.trim() === '') continue;
+    break;
+  }
+  return out.join('');
+}
+
+function followedBy(segments, index, follows) {
+  for (let k = index + 1; k < segments.length; k += 1) {
+    const { text } = segments[k];
+    if (text === undefined || text.trim() === '') continue;
+    return text.trim().startsWith(follows) || follows.startsWith(text.trim());
+  }
+  return false;
+}
+
 async function main() {
-  const [uri, exact] = process.argv.slice(2);
+  const [uri, exact, prefix = '', suffix = ''] = process.argv.slice(2);
   // Missing arguments are a caller bug: exit non-zero rather than emit the empty
   // string, which is the legitimate "selection not found -> OCR fallback" signal.
-  if (!uri || !exact) throw new Error('usage: index.mjs <uri> <exact>');
+  if (!uri || !exact) throw new Error('usage: index.mjs <uri> <exact> [prefix] [suffix]');
   const html = await fetch(uri).then(r => r.text());
   const { document } = parseHTML(html);
 
   markFormulas(document);
-  return locate(segmentsOf(document.querySelector('main') || document.body), strip(exact));
+  const root = document.querySelector('main') || document.body;
+  const segments = segmentsOf(root, dollarsAreMath(document));
+  return locate(segments, strip(exact)) || locateByContext(segments, prefix, suffix);
 }
 
 // Exit 0 with the reconstructed quote (empty = selection not found, so the caller falls back

@@ -25,7 +25,7 @@ class TestNormalize:
     def test_normalize_missing_backfills_only_quote_bearing_rows_without_one(
         self, svc, html_source_extract, factories, db_session
     ):
-        html_source_extract.side_effect = lambda _uri, exact: exact
+        html_source_extract.side_effect = lambda _uri, exact, *_context: exact
         missing = self.annotation(factories, "plain existing prose", "https://ex.com/a")
         existing = self.annotation(factories, "already normalized", "https://ex.com/b")
         factories.AnnotationNormalized(
@@ -143,7 +143,7 @@ class TestNormalize:
         db_session.flush()
 
         html_source_extract.assert_called_once_with(
-            "https://ex.com/p", "the moduli M here"
+            "https://ex.com/p", "the moduli M here", "", ""
         )
         assert row.normalized_quote == r"the moduli $\mathcal{M}$ here"
         assert row.method == "html"
@@ -334,8 +334,11 @@ class TestHtmlSourceExtractRealBoundary:
 
     These are the only tests that cross the ``subprocess.run`` boundary: argument
     marshalling, the exit-code protocol (0 + output = recovered, 0 + empty = legitimate
-    miss, non-zero = hard failure -> ``MathRecoveryError``), and the real KaTeX/linkedom
+    miss, non-zero = hard failure -> ``MathRecoveryError``), and the real linkedom
     reconstruction against a real local HTTP server.
+
+    What the extractor makes of real pages is proved where a reader meets it, in
+    ``tests/functional/api/html_math_annotations_test.py``.
     """
 
     def test_recovers_math_from_a_real_page_over_real_http(self, page_url):
@@ -355,14 +358,56 @@ class TestHtmlSourceExtractRealBoundary:
         with pytest.raises(MathRecoveryError, match="html-normalize failed"):
             _html_source_extract("http://127.0.0.1:1/nowhere.html", "anything")
 
+    def test_dollars_are_money_on_a_page_that_does_not_typeset_them(self, prices_url):
+        # A page carrying no MathJax says nothing about `$`, so nothing between two of them
+        # is mathematics: a quote about prices comes back as the reader read it.
+        exact = "the book costs $5 and the sequel costs $10 today"
+
+        assert _html_source_extract(prices_url, exact) == exact
+
+    def test_dollars_are_math_on_a_page_that_says_they_are(self, mathjax_url):
+        # The same characters on a page whose MathJax config declares `$` as an inline
+        # delimiter -- which is how Stack Exchange, MathOverflow and most of the
+        # mathematical web ship their TeX -- are the author's mathematics.
+        recovered = _html_source_extract(mathjax_url, "we set x2+1 and then continue")
+
+        assert recovered == "we set $x^2+1$ and then continue"
+
+    def test_a_dollar_inside_code_is_never_math(self, mathjax_url):
+        # Even where `$` is a delimiter, MathJax skips code -- and so must this, or a shell
+        # snippet becomes a formula.
+        exact = "run cd $HOME && ls $PATH now"
+
+        assert _html_source_extract(mathjax_url, exact) == exact
+
     @pytest.fixture
     def page_url(self):
-        page = (
+        yield from self.serve(
             b"<html><body><main><p>let "
             b'<span class="math inline">\\(x^{2}\\)</span>'
             b" be a square and this is prose.</p></main></body></html>"
         )
 
+    @pytest.fixture
+    def prices_url(self):
+        yield from self.serve(
+            b"<html><body><main><p>the book costs $5 and the sequel "
+            b"costs $10 today</p></main></body></html>"
+        )
+
+    @pytest.fixture
+    def mathjax_url(self):
+        yield from self.serve(
+            b"<html><head>"
+            b'<script>MathJax = {tex: {inlineMath: [["$", "$"]]}};</script>'
+            b'<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js">'
+            b"</script></head><body><main>"
+            b"<p>we set $x^2+1$ and then continue</p>"
+            b"<p>run <code>cd $HOME && ls $PATH</code> now</p>"
+            b"</main></body></html>"
+        )
+
+    def serve(self, page: bytes):
         class Handler(http.server.BaseHTTPRequestHandler):
             def do_GET(self):
                 self.send_response(200)

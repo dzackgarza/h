@@ -471,7 +471,7 @@ class TestPostAnnotation:
     ):
         monkeypatch.setattr(
             "h.services.normalization._html_source_extract",
-            lambda _uri, _exact: r"the moduli $\mathcal{M}$ here",
+            lambda _uri, _exact, *_context: r"the moduli $\mathcal{M}$ here",
         )
         _, token = user_with_token
         headers = {"Authorization": f"Bearer {token.value}"}
@@ -491,7 +491,7 @@ class TestPostAnnotation:
         self, app, db_session, user_with_token, monkeypatch
     ):
         # A genuine recovery failure must persist nothing: the annotation count is unchanged.
-        def _raise(_uri, _exact):
+        def _raise(_uri, _exact, *_context):
             msg = "boom"
             raise MathRecoveryError(msg)
 
