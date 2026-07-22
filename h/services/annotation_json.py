@@ -177,6 +177,12 @@ class AnnotationJSONService:
                 Annotation.group,
                 # Optimise access to the mentions
                 Annotation.mentions,
+                # `present` reads the normalized companion row for every annotation;
+                # without it here each one costs its own SELECT, so a listing response
+                # would get more expensive the more annotations it returns. Loaded for
+                # rowless annotations too -- an absent row resolves to None off this
+                # same load rather than re-querying.
+                Annotation.normalized,
             ],
         )
 
