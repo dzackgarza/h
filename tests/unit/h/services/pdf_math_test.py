@@ -2,16 +2,17 @@
 
 The OCR itself is Mathpix's correctness, proven out-of-band. What this module owns, and
 what these tests prove, is: locating the annotation's region as the bounding box of the
-selected text -- every line it spans, at the text column's width -- so the right slice of
-the page is what gets OCR'd, and trimming the OCR back to the selection. On a locating
-miss (or an out-of-range page or empty OCR) it raises rather than OCR the wrong region or
-return raw. Region logic runs against a real PyMuPDF document with text at known
-positions: a real boundary, no network, no OCR.
+selected text -- every line it spans, at the text column's width -- and blanking what that
+box holds beyond the selection, so the image handed to Mathpix is the selection and only
+the selection. On a locating miss (or an out-of-range page or empty OCR) it raises rather
+than OCR the wrong region or return raw. Region logic runs against a real PyMuPDF document
+with text at known positions: a real boundary, no network, no OCR.
 """
 
 from __future__ import annotations
 
 import http.server
+import io
 import threading
 
 import pymupdf as fitz
@@ -132,20 +133,6 @@ def test_quote_rect_uses_prose_context_for_a_formula_only_exact_quote():
     assert "omega equals the residue formula" in page.get_textbox(rect)
 
 
-def test_trim_to_quote_cuts_trailing_overcapture():
-    # The crop is full column width, so its last line runs past the selection; the trailing
-    # prose of the quote marks where to cut, and the math before it is preserved.
-    exact = "the residue is some finite data attached"
-    ocr = (
-        "the residue is $\\omega$ some finite data attached. "
-        "Unrelated trailing text here."
-    )
-    assert (
-        pdf_math._trim_to_quote(ocr, exact)  # noqa: SLF001
-        == "the residue is $\\omega$ some finite data attached."
-    )
-
-
 def test_clean_pdf_quote_returns_the_ocr_latex(monkeypatch):
     # The located region is OCR'd; the trimmed OCR LaTeX is what's returned (never the raw
     # text-layer quote). OCR itself is Mathpix's job, mocked here.
@@ -212,25 +199,6 @@ def test_ocr_latex_wraps_mathpix_request_failure(monkeypatch):
         pdf_math.ocr_latex(b"\x89PNG")
 
 
-def test_trim_to_quote_raises_when_the_quote_has_too_few_recognizable_words():
-    # A quote with fewer than three recognizable words (e.g. a bare formula) gives the
-    # trimmer no prose anchor. Returning the untrimmed crop would persist neighboring
-    # column text as if it were the selection, so this must fail the recovery instead.
-    ocr = "$\\omega^2 = 0$ Unrelated trailing sentence from the next paragraph."
-    with pytest.raises(MathRecoveryError, match="trim"):
-        pdf_math._trim_to_quote(ocr, "$\\omega^2=0$")  # noqa: SLF001
-
-
-def test_trim_to_quote_raises_when_the_trailing_prose_cannot_be_located():
-    # The quote's last words are not findable in the OCR output (e.g. OCR read them
-    # differently). Keeping the whole crop would silently include the next sentence,
-    # so an unlocatable tail must fail the recovery instead.
-    exact = "the residue is some finite data attached"
-    ocr = "the residue is $\\omega$ some other words entirely. Next sentence here."
-    with pytest.raises(MathRecoveryError, match="trim"):
-        pdf_math._trim_to_quote(ocr, exact)  # noqa: SLF001
-
-
 def test_fetch_pdf_evicts_the_oldest_entry_beyond_the_cache_bound():
     # The PDF byte cache exists to dedupe fetches within a burst of annotations on one
     # document; it must not grow without bound for the life of a web process.
@@ -282,25 +250,6 @@ def test_quote_rect_is_not_shifted_by_punctuation_only_page_words():
     assert "argument" in page.get_textbox(rect)  # the final word is inside the crop
 
 
-def test_trim_to_quote_cuts_leading_overcapture():
-    # Found by the live Mathpix proof: the crop is full column width, so its first line
-    # can begin before the selection; the quote's leading prose marks where to start,
-    # symmetric with the trailing cut.
-    exact = "the residue is some finite data attached"
-    ocr = "An earlier sentence ends here. the residue is $\\omega$ some finite data attached"
-    assert (
-        pdf_math._trim_to_quote(ocr, exact)  # noqa: SLF001
-        == "the residue is $\\omega$ some finite data attached"
-    )
-
-
-def test_trim_to_quote_raises_when_the_leading_prose_cannot_be_located():
-    exact = "the residue is some finite data attached"
-    ocr = "entirely different opening words $\\omega$ some finite data attached"
-    with pytest.raises(MathRecoveryError, match="trim"):
-        pdf_math._trim_to_quote(ocr, exact)  # noqa: SLF001
-
-
 def test_clean_pdf_quote_recovers_a_selection_that_ends_in_math(monkeypatch):
     # The live failure this reproduces (dzackgarza/h#3): every PDF selection ending in math
     # was rejected with "the quote's trailing words were not found in the OCR output". The
@@ -320,34 +269,56 @@ def test_clean_pdf_quote_recovers_a_selection_that_ends_in_math(monkeypatch):
     monkeypatch.setattr(pdf_math, "ocr_latex", lambda _png: ocr)
 
     result = pdf_math.clean_pdf_quote(
-        uri, 0, "surfaces ( Z,  M )   with   a   2-divisible   polarization   M  =  L ⊗ 2"
+        uri,
+        0,
+        "surfaces ( Z,  M )   with   a   2-divisible   polarization   M  =  L ⊗ 2",
     )
 
     assert result == ocr
 
 
-def test_selection_crop_excludes_the_neighbouring_text_on_the_selection_lines():
-    # The burden the OCR trim used to carry: the crop must not carry text from outside the
-    # selection into the OCR. Carried here by the crop itself -- the selection's own first
-    # and last word rectangles are known, so the line remainders on either side are removed
-    # from the page rather than cut back out of the OCR afterwards.
+def _ink_columns(png: bytes, *, band_top: float, band_bottom: float) -> set[int]:
+    """Return the x pixel columns with ink, between two fractions of the image height."""
+    pixmap = fitz.Pixmap(io.BytesIO(png))
+    rows = range(int(pixmap.height * band_top), int(pixmap.height * band_bottom))
+    return {
+        x
+        for x in range(pixmap.width)
+        for y in rows
+        if pixmap.pixel(x, y)[:3] != (255, 255, 255)
+    }
+
+
+def test_selection_png_blanks_the_neighbouring_text_on_the_selection_lines():
+    # The burden the OCR trim used to carry: text from outside the selection must not reach
+    # the OCR. Carried here by the image itself -- the selection's own word rectangles bound
+    # what is kept, and the remainder of its first and last lines is painted out -- rather
+    # than cut back out of the OCR afterwards, which a selection ending in math defeats.
     doc = _doc_with_lines(
         [
             (100, "An earlier sentence ends here. The residue theorem gives"),
-            (120, "X = 2 which completes the argument. An unrelated sentence follows."),
+            (120, "X = 2 which completes the argument. An unrelated sentence."),
         ]
     )
     page = doc[0]
     exact = "The residue theorem gives X = 2 which completes the argument."
 
-    rect = pdf_math._selection_crop(page, exact)  # noqa: SLF001
+    png = pdf_math._selection_png(page, exact)  # noqa: SLF001
 
-    assert rect is not None
-    captured = page.get_textbox(rect)
-    assert "residue theorem gives" in captured  # the selection's first line
-    assert "completes the argument" in captured  # the selection's last line
-    assert "An earlier sentence" not in captured  # before it, on the same line
-    assert "unrelated sentence" not in captured  # after it, on the same line
+    assert png is not None
+    # The crop spans the two lines; ink in the top third belongs to the first, ink in the
+    # bottom third to the second.
+    first_line = _ink_columns(png, band_top=0.0, band_bottom=0.45)
+    last_line = _ink_columns(png, band_top=0.55, band_bottom=1.0)
+    assert first_line  # the selection's first line is rendered
+    assert last_line  # and so is its last
+    # "An earlier sentence ends here." precedes the selection on its first line, so the
+    # first line's ink starts where the selection does -- to the right of where the
+    # second line, which the selection starts at the very beginning of, starts.
+    assert min(first_line) > min(last_line)
+    # "An unrelated sentence." follows the selection on its last line, so the last line's
+    # ink stops where the selection does, left of where the first line runs to.
+    assert max(last_line) < max(first_line)
 
 
 class TestRecoveryTimeoutSetting:

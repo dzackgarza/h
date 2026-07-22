@@ -8,8 +8,9 @@ region.
 A Hypothesis PDF annotation carries the page (``PageSelector.index``) and the selected
 text. We fetch the PDF, render that page, crop the bounding box of the selection --
 located from the page's own words, so every line it spans is captured at the text
-column's width -- and OCR the crop with Mathpix -> clean ``$…$`` LaTeX. The stored
-selectors (anchoring) are never touched; only the normalized copy carries the recovery.
+column's width -- blank what that box holds beyond the selection on its first and last
+lines, and OCR the crop with Mathpix -> clean ``$…$`` LaTeX. The stored selectors
+(anchoring) are never touched; only the normalized copy carries the recovery.
 """
 
 from __future__ import annotations
@@ -148,15 +149,14 @@ def _projected_bounds(forms: list[str], words: list[str]) -> tuple[int, int] | N
     return (max(0, start), min(len(forms) - 1, end))
 
 
-def _quote_rect(
+def _selection_word_rects(
     page: fitz.Page, exact: str, prefix: str = "", suffix: str = ""
-) -> fitz.Rect | None:
-    """Locate the annotated text's bounding box on ``page`` -- every line, at column width.
+) -> list[fitz.Rect] | None:
+    """Locate the page's own words that the selection covers, in reading order.
 
     Located from the quote's own words: its prose anchors the two ends (the math between
     need not match the flattened glyphs), so a multi-line selection is captured whole, not
-    collapsed to the single middle strip a prefix/suffix bracket can produce, and the
-    column-tight width excludes marginal ink (e.g. arXiv's vertical id stamp). ``None`` when
+    collapsed to the single middle strip a prefix/suffix bracket can produce. ``None`` when
     the quote can't be located, so the caller keeps the raw text rather than OCR the wrong
     region.
     """
@@ -188,42 +188,130 @@ def _quote_rect(
         start, end = bounds
     if start > end:
         return None
-    rects = [entries[i][1] for i in range(start, end + 1)]
-    pad = 2.0
+    return [entries[i][1] for i in range(start, end + 1)]
+
+
+# Breathing room around the crop, so ascenders and descenders are not shaved off the
+# rendered region and the same margin is honoured when the line remainders are removed.
+_PAD = 2.0
+
+
+def _quote_rect(
+    page: fitz.Page, exact: str, prefix: str = "", suffix: str = ""
+) -> fitz.Rect | None:
+    """Locate the annotated text on ``page`` -- every line it spans, at column width.
+
+    The column-tight width excludes marginal ink (e.g. arXiv's vertical id stamp).
+    """
+    rects = _selection_word_rects(page, exact, prefix=prefix, suffix=suffix)
+    if rects is None:
+        return None
     return fitz.Rect(
-        max(page.rect.x0, min(r.x0 for r in rects) - pad),
-        max(page.rect.y0, min(r.y0 for r in rects) - pad),
-        min(page.rect.x1, max(r.x1 for r in rects) + pad),
-        min(page.rect.y1, max(r.y1 for r in rects) + pad),
+        max(page.rect.x0, min(r.x0 for r in rects) - _PAD),
+        max(page.rect.y0, min(r.y0 for r in rects) - _PAD),
+        min(page.rect.x1, max(r.x1 for r in rects) + _PAD),
+        min(page.rect.y1, max(r.y1 for r in rects) + _PAD),
     )
 
 
-def _trim_to_quote(ocr: str, exact: str) -> str:
-    """Trim OCR output back to the annotated span, or raise when it cannot be bounded.
+def _line_remainders(
+    page: fitz.Page, crop: fitz.Rect, rects: list[fitz.Rect]
+) -> list[fitz.Rect]:
+    """Return the parts of each line inside ``crop`` that the selection does not cover.
 
-    The crop is full column width, so its last line can run past the selection into the
-    next sentence; cut after the quote's trailing prose, keeping the math before it. When
-    the quote offers no usable prose anchor (fewer than three recognizable words) or its
-    trailing words cannot be located in the OCR output, the crop cannot be bounded to the
-    selection -- returning it untrimmed would persist neighboring text as if it were the
-    selection, so both cases raise instead (hypothesis-review#7: fail loud, never
-    fail open).
+    Measured per line of the page's own text, against every selection word on that line
+    rather than the first and last in reading order. Reading order is not left to right
+    where a formula carries sub- and superscripts: on arXiv 2312.03638 the last word of
+    ``... polarization M = L ⊗ 2`` is the subscript ``Z``, which sits to the *left* of the
+    ``⊗ 2`` it belongs to, so cutting at the last word's right edge would erase the end of
+    the very formula being recovered.
     """
-    qtokens = [t for t in exact.split() if _norm(t)]
-    if len(qtokens) < 3:
-        msg = "OCR trim failed: the quote has too few recognizable words to bound the crop"
-        raise MathRecoveryError(msg)
-    head_core = [re.escape(t.strip(".,;:()[]-")) for t in qtokens[:3]]
-    head = re.search(r"\W+".join(head_core), ocr, re.IGNORECASE)
-    if not head:
-        msg = "OCR trim failed: the quote's leading words were not found in the OCR output"
-        raise MathRecoveryError(msg)
-    tail_core = [re.escape(t.strip(".,;:()[]-")) for t in qtokens[-3:]]
-    tail = list(re.finditer(r"\W+".join(tail_core) + r"[.,;:)\]]*", ocr, re.IGNORECASE))
-    if not tail or tail[-1].end() <= head.start():
-        msg = "OCR trim failed: the quote's trailing words were not found in the OCR output"
-        raise MathRecoveryError(msg)
-    return ocr[head.start() : tail[-1].end()].strip()
+    # A word belongs to the line whose box holds its centre, not to every line box its own
+    # box happens to touch: a subscript's box is tall enough to reach the neighbouring line,
+    # and treating it as text on that line would place the cut in the middle of a line the
+    # selection covers whole.
+    lines = []
+    for block in page.get_text("dict")["blocks"]:
+        for line in block.get("lines", ()):
+            box = fitz.Rect(line["bbox"])
+            on_line = [
+                r
+                for r in rects
+                if box.y0 <= (r.y0 + r.y1) / 2 <= box.y1
+                and box.x0 <= (r.x0 + r.x1) / 2 <= box.x1
+            ]
+            if on_line:
+                lines.append((box, on_line))
+    if not lines:
+        return []
+    # Only the outermost lines can carry text from outside the selection: the selection
+    # covers every line between them whole.
+    _, first_words = min(lines, key=lambda item: item[0].y0)
+    _, last_words = max(lines, key=lambda item: item[0].y1)
+    return [
+        _band(first_words, crop.x0, min(r.x0 for r in first_words)),
+        _band(last_words, max(r.x1 for r in last_words), crop.x1),
+    ]
+
+
+# Set text lines in a PDF overlap vertically: a tall glyph on one line -- an integral, a
+# bracket, a subscript -- reaches into the box of the line below. A band spanning a line's
+# full height therefore also covers ink belonging to its neighbour, so each band is inset
+# to the line's own core. What that gives up is the tip of a neighbouring ascender or
+# descender surviving at the band's edge, which OCR reads past; what it protects is the
+# selected formula on the line above, which OCR cannot recover once erased.
+_LINE_INSET = 0.2
+
+
+def _band(words: list[fitz.Rect], x0: float, x1: float) -> fitz.Rect:
+    """Return a strip over the core of the line ``words`` sit on, from ``x0`` to ``x1``."""
+    top, bottom = min(r.y0 for r in words), max(r.y1 for r in words)
+    inset = (bottom - top) * _LINE_INSET
+    return fitz.Rect(x0, top + inset, x1, bottom - inset)
+
+
+def _selection_png(
+    page: fitz.Page, exact: str, prefix: str = "", suffix: str = ""
+) -> bytes | None:
+    """Render the image to OCR: the selection's box, with its line remainders blanked.
+
+    The box spans whole lines at column width, so its first line can begin before the
+    selection starts and its last can run past where it ends -- the neighbouring sentence,
+    which must not reach the OCR and be stored as if it were the selection. Both remainders
+    are bounded by the selection's own word rectangles, so they are painted out of the
+    rendered region here rather than cut back out of the OCR afterwards.
+
+    Cutting them out afterwards is what the recovery used to do, by searching the OCR for
+    the quote's leading and trailing words. That cannot work when a selection begins or ends
+    in math: those words are flattened text-layer glyphs, and the OCR renders the same
+    region as LaTeX, so the anchor never matches and a correct recovery is rejected
+    (dzackgarza/h#3). The rendered page is the right place to make the cut, because there
+    the selection's extent is known exactly rather than inferred from its transcription.
+
+    Painted, not redacted: PDF redaction drops every character whose box meets the
+    rectangle, and a neighbouring line's tall glyph reaches into this one, so redacting a
+    line remainder deletes formulas the selection does contain. Painting is a crop, and
+    takes only the pixels it covers.
+    """
+    rects = _selection_word_rects(page, exact, prefix=prefix, suffix=suffix)
+    if rects is None:
+        return None
+    crop = fitz.Rect(
+        max(page.rect.x0, min(r.x0 for r in rects) - _PAD),
+        max(page.rect.y0, min(r.y0 for r in rects) - _PAD),
+        min(page.rect.x1, max(r.x1 for r in rects) + _PAD),
+        min(page.rect.y1, max(r.y1 for r in rects) + _PAD),
+    )
+    pixmap = page.get_pixmap(dpi=_DPI, clip=crop)
+    # A clipped pixmap keeps the page's device coordinates (``pixmap.irect`` is the clip,
+    # not a 0-based box), so the bands are scaled into that same space rather than offset
+    # against the crop; ``set_rect`` ignores whatever falls outside the pixmap.
+    to_device = fitz.Matrix(_DPI / 72.0, _DPI / 72.0)
+    for band in _line_remainders(page, crop, rects):
+        if band.is_empty or band.width <= 0:
+            continue
+        pixmap.set_rect((band * to_device).round(), (255, 255, 255))
+    return pixmap.tobytes("png")
 
 
 def ocr_latex(png: bytes) -> str:
@@ -306,13 +394,12 @@ def clean_pdf_quote(
         if not 0 <= page_index < doc.page_count:
             msg = f"PDF page {page_index} is out of range (0..{doc.page_count - 1})"
             raise MathRecoveryError(msg)
-        rect = _quote_rect(doc[page_index], exact, prefix=prefix, suffix=suffix)
-        if rect is None:
+        png = _selection_png(doc[page_index], exact, prefix=prefix, suffix=suffix)
+        if png is None:
             msg = "PDF region could not be located for the quote"
             raise MathRecoveryError(msg)
-        png = doc[page_index].get_pixmap(dpi=_DPI, clip=rect).tobytes("png")
     ocr = ocr_latex(png)
     if not ocr.strip():
         msg = "OCR returned empty output for the PDF region"
         raise MathRecoveryError(msg)
-    return _trim_to_quote(ocr, exact)
+    return ocr.strip()
