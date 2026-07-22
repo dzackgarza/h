@@ -233,6 +233,8 @@ pygments==2.19.2
     # via pytest
 pyjwt[crypto]==2.10.1
     # via -r prod.txt
+pymupdf==1.28.0
+    # via -r prod.txt
 pyparsing==3.2.5
     # via -r prod.txt
 pyproject-hooks==1.0.0

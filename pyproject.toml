@@ -79,6 +79,23 @@ ignore = [
 "bin/*" = [
     "INP001",
 ]
+"h/services/pdf_math.py" = [
+    # This module's whole job is matching mathematical Unicode (Greek letters, operators),
+    # so ambiguous-to-ASCII characters are its data, not a typo.
+    "RUF001",
+    "RUF002",
+    "RUF003",
+]
+"tests/unit/h/services/pdf_math_test.py" = [
+    # Exercises the math-symbol detector, so the fixtures are real math symbols by design.
+    "RUF001",
+    "RUF003",
+]
+"tests/unit/h/services/normalization_test.py" = [
+    # Exercises the math-signal detectors, so the fixtures are real math symbols by design.
+    "RUF001",
+    "RUF003",
+]
 
 [tool.coverage.run]
 branch = true

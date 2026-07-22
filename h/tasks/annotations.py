@@ -2,9 +2,7 @@ from h.db.types import URLSafeUUID
 from h.models import Annotation
 from h.services.annotation_authority_queue import AnnotationAuthorityQueueService
 from h.services.annotation_write import AnnotationWriteService
-from h.tasks.celery import celery, get_task_logger
-
-log = get_task_logger(__name__)
+from h.tasks.celery import celery
 
 
 @celery.task

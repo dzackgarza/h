@@ -17,6 +17,7 @@ from h.services.http import HTTPService
 from h.services.job_queue import JobQueueService
 from h.services.jwt import JWTService
 from h.services.mention import MentionService
+from h.services.normalization import NormalizationService
 from h.services.notification import NotificationService
 from h.services.oidc import OIDCService
 from h.services.subscription import SubscriptionService
@@ -56,6 +57,9 @@ def includeme(config):  # pragma: no cover  # noqa: PLR0915
         "h.services.checkpoint.factory", iface=CheckpointService
     )
     config.register_service_factory("h.services.mention.factory", iface=MentionService)
+    config.register_service_factory(
+        "h.services.normalization.factory", iface=NormalizationService
+    )
     config.register_service_factory(
         "h.services.notification.factory", iface=NotificationService
     )

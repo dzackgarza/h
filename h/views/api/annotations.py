@@ -15,7 +15,6 @@ authorization system. You can find the mapping between annotation "permissions"
 objects and Pyramid ACLs in :mod:`h.traversal`.
 """
 
-from pyramid import i18n
 from pyramid.httpexceptions import HTTPNotFound
 
 from h import search as search_lib
@@ -28,11 +27,9 @@ from h.schemas.annotation import (
 )
 from h.schemas.util import validate_query_params
 from h.security import Permission
-from h.services import AnnotationWriteService
+from h.services import AnnotationWriteService, NormalizationService
 from h.views.api.config import api_config
 from h.views.api.helpers.json_payload import json_payload
-
-_ = i18n.TranslationStringFactory(__package__)
 
 
 @api_config(
@@ -83,6 +80,11 @@ def create(request):
     annotation = request.find_service(AnnotationWriteService).create_annotation(
         data=appstruct
     )
+
+    # Recover the display-ready (math-normalized) quote synchronously, in this request's
+    # transaction. A genuine recovery failure raises MathRecoveryError, which pyramid_tm
+    # turns into a rollback: the annotation is never persisted with a raw quote.
+    request.find_service(NormalizationService).normalize(annotation)
 
     _publish_annotation_event(request, annotation, "create")
 

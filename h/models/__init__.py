@@ -20,6 +20,7 @@ key to. So for convenience the test module can instead just do
 from h.models.activation import Activation
 from h.models.annotation import Annotation, ModerationStatus
 from h.models.annotation_metadata import AnnotationMetadata
+from h.models.annotation_normalized import AnnotationNormalized
 from h.models.annotation_slim import AnnotationSlim
 from h.models.auth_client import AuthClient
 from h.models.auth_ticket import AuthTicket
@@ -50,6 +51,7 @@ from h.models.user_rename import UserRename
 __all__ = (
     "Activation",
     "Annotation",
+    "AnnotationNormalized",
     "AnnotationSlim",
     "AuthClient",
     "AuthTicket",

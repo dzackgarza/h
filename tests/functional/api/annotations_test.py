@@ -1,7 +1,14 @@
+from uuid import UUID
+
 import elasticsearch_dsl
 import pytest
 
-from h.models import GroupMembership, GroupMembershipRoles, ModerationStatus
+from h.models import Annotation, GroupMembership, GroupMembershipRoles, ModerationStatus
+from h.services.pdf_math import MathRecoveryError
+
+# A minimal selector marking a text selection: a top-level create requires one, and it is
+# what math normalization recovers from.
+_QUOTE_TARGET = [{"selector": [{"type": "TextQuoteSelector", "exact": "the moduli M"}]}]
 
 pytestmark = pytest.mark.usefixtures("init_elasticsearch")
 
@@ -433,6 +440,7 @@ class TestPostAnnotation:
             },
             "text": "My annotation",
             "uri": "http://example.com",
+            "target": _QUOTE_TARGET,
         }
 
         res = app.post_json(
@@ -442,20 +450,110 @@ class TestPostAnnotation:
         assert res.status_code == 400
         assert res.json["reason"].startswith("group:")
 
-    # TODO: This endpoint should return a 201  # noqa: FIX002, TD002, TD003
-    def test_it_returns_http_200_when_annotation_created(self, app, user_with_token):
+    def test_it_creates_a_page_note_without_normalization(
+        self, app, db_session, user_with_token
+    ):
         _, token = user_with_token
+        headers = {"Authorization": f"Bearer {token.value}"}
+        annotation = {"group": "__world__", "text": "note", "uri": "http://example.com"}
 
+        res = app.post_json("/api/annotations", annotation, headers=headers)
+
+        assert res.status_code == 200
+        assert res.json["text"] == "note"
+        created = db_session.get(Annotation, res.json["id"])
+        assert created is not None
+        assert created.normalized is None
+
+    # TODO: This endpoint should return a 201  # noqa: FIX002, TD002, TD003
+    def test_it_returns_the_normalized_quote_when_created(
+        self, app, user_with_token, monkeypatch
+    ):
+        monkeypatch.setattr(
+            "h.services.normalization._html_source_extract",
+            lambda _uri, _exact: r"the moduli $\mathcal{M}$ here",
+        )
+        _, token = user_with_token
         headers = {"Authorization": f"Bearer {token.value}"}
         annotation = {
             "group": "__world__",
             "text": "My annotation",
             "uri": "http://example.com",
+            "target": _QUOTE_TARGET,
         }
 
         res = app.post_json("/api/annotations", annotation, headers=headers)
 
         assert res.status_code == 200
+        assert res.json["normalized_quote"] == r"the moduli $\mathcal{M}$ here"
+
+    def test_a_failed_normalization_rolls_the_create_back(
+        self, app, db_session, user_with_token, monkeypatch
+    ):
+        # A genuine recovery failure must persist nothing: the annotation count is unchanged.
+        def _raise(_uri, _exact):
+            msg = "boom"
+            raise MathRecoveryError(msg)
+
+        monkeypatch.setattr("h.services.normalization._html_source_extract", _raise)
+        _, token = user_with_token
+        headers = {"Authorization": f"Bearer {token.value}"}
+        annotation = {
+            "group": "__world__",
+            "text": "My annotation",
+            "uri": "http://example.com",
+            "target": _QUOTE_TARGET,
+        }
+        before = db_session.query(Annotation).count()
+
+        res = app.post_json(
+            "/api/annotations", annotation, headers=headers, expect_errors=True
+        )
+
+        assert res.status_code == 500
+        assert res.json["status"] == "failure"
+        assert res.json["code"] == "math_normalization_failed"
+        assert res.json["description"] == (
+            "The annotation was not saved because its selected math could not be "
+            "recovered. Check that the document is reachable, then retry."
+        )
+        assert res.json["reason"] == "boom"
+        assert res.json["retryable"] is True
+        UUID(res.json["diagnostic_id"])
+        assert db_session.query(Annotation).count() == before
+
+    def test_a_malformed_recovery_timeout_is_a_structured_failure(
+        self, app, db_session, user_with_token, monkeypatch
+    ):
+        # A deployment that set H_MATH_NORMALIZE_TIMEOUT to something that is not a
+        # number is a misconfiguration, and must reach the operator as the service's
+        # structured math-recovery failure -- diagnostic id, retryable flag, and the
+        # offending setting named -- not as an opaque internal error raised from
+        # whichever line happened to convert the value.
+        monkeypatch.setenv("H_MATH_NORMALIZE_TIMEOUT", "half a minute")
+        _, token = user_with_token
+        headers = {"Authorization": f"Bearer {token.value}"}
+        annotation = {
+            "group": "__world__",
+            "text": "My annotation",
+            "uri": "http://example.com",
+            "target": _QUOTE_TARGET,
+        }
+        before = db_session.query(Annotation).count()
+
+        res = app.post_json(
+            "/api/annotations", annotation, headers=headers, expect_errors=True
+        )
+
+        assert res.status_code == 500
+        assert res.json["code"] == "math_normalization_failed"
+        assert res.json["retryable"] is True
+        UUID(res.json["diagnostic_id"])
+        # The operator has to be able to tell which setting they got wrong and what it
+        # was holding; both are named in the failure.
+        assert "H_MATH_NORMALIZE_TIMEOUT" in res.json["reason"]
+        assert "half a minute" in res.json["reason"]
+        assert db_session.query(Annotation).count() == before
 
 
 class TestPatchAnnotation:

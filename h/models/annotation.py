@@ -151,6 +151,13 @@ class Annotation(Base):
 
     mentions = relationship("Mention", back_populates="annotation")
 
+    normalized = relationship(
+        "AnnotationNormalized",
+        back_populates="annotation",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
+
     notifications = relationship("Notification", back_populates="source_annotation")
 
     moderation_status: Mapped[ModerationStatus | None]

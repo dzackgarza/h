@@ -151,6 +151,8 @@ pycryptodomex==3.23.0
     # via -r prod.in
 pyjwt[crypto]==2.10.1
     # via -r prod.in
+pymupdf==1.28.0
+    # via -r prod.in
 pyparsing==3.2.5
     # via -r prod.in
 pyramid==2.0.2

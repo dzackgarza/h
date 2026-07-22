@@ -1,0 +1,49 @@
+name: PR Review
+'on':
+  pull_request: {}
+jobs:
+  pr-description-checklist:
+    uses: dzackgarza/ai-review-ci/.github/workflows/_gates.yml@main
+    permissions:
+      contents: read
+      pull-requests: read
+      actions: read
+      issues: read
+    with:
+      gate: pr-description-checklist
+      profile: python
+  general:
+    uses: dzackgarza/ai-review-ci/.github/workflows/_review.yml@main
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+      pull-requests: write
+      issues: write
+    with:
+      report_type: general
+      scope: diff
+  slop:
+    uses: dzackgarza/ai-review-ci/.github/workflows/_review.yml@main
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+      pull-requests: write
+      issues: write
+    with:
+      report_type: slop
+      scope: diff
+  thread-resolution:
+    needs:
+    - general
+    - slop
+    uses: dzackgarza/ai-review-ci/.github/workflows/_gates.yml@main
+    permissions:
+      contents: read
+      pull-requests: read
+      actions: read
+      issues: read
+    with:
+      gate: thread-resolution
+      profile: python

@@ -91,6 +91,23 @@ class AnnotationJSONService:
             }
         )
 
+        # The display-ready quote is created synchronously with new annotations. Legacy
+        # highlights without a normalization row must remain visibly unusable: returning the
+        # flattened selector text would silently substitute a different mathematical value.
+        normalized = annotation.normalized
+        model["normalized_quote"] = (
+            normalized.normalized_quote if normalized is not None else ""
+        )
+        if normalized is None and annotation.quote:
+            model["normalization_error"] = {
+                "code": "math_normalization_missing",
+                "description": (
+                    "This legacy annotation has no normalized quote. Run the normalization "
+                    "reconciliation command and inspect its diagnostic before using the selection."
+                ),
+                "retryable": False,
+            }
+
         author = self._user_service.fetch(annotation.userid)
         model["mentions"] = [
             MentionJSONPresenter(mention, self._request).asdict()
@@ -160,6 +177,12 @@ class AnnotationJSONService:
                 Annotation.group,
                 # Optimise access to the mentions
                 Annotation.mentions,
+                # `present` reads the normalized companion row for every annotation;
+                # without it here each one costs its own SELECT, so a listing response
+                # would get more expensive the more annotations it returns. Loaded for
+                # rowless annotations too -- an absent row resolves to None off this
+                # same load rather than re-querying.
+                Annotation.normalized,
             ],
         )
 

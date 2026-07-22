@@ -5,12 +5,16 @@ Views rendered by the web application in response to exceptions thrown within
 API views.
 """
 
+import logging
+from uuid import uuid4
+
 from h_api.exceptions import JSONAPIError
 from pyramid import httpexceptions
 from pyramid.exceptions import BadCSRFOrigin, BadCSRFToken
 from pyramid.view import forbidden_view_config, notfound_view_config, view_config
 
 from h.i18n import TranslationString as _
+from h.services.pdf_math import MathRecoveryError
 from h.util.view import handle_exception, json_view
 from h.views.api.config import cors_policy
 from h.views.api.decorators import (
@@ -19,6 +23,8 @@ from h.views.api.decorators import (
     validate_media_types,
 )
 from h.views.api.exceptions import OAuthAuthorizeError
+
+log = logging.getLogger(__name__)
 
 # All exception views below need to apply the `cors_policy` decorator for the
 # responses to be readable by web applications other than those on the same
@@ -55,6 +61,33 @@ def api_error(context, request):
     """Handle an expected/deliberately thrown API exception."""
     request.response.status_code = context.status_code
     return {"status": "failure", "reason": context.detail}
+
+
+@json_view(context=MathRecoveryError, path_info="/api/", decorator=cors_policy)
+def math_recovery_error(context, request):
+    """Handle a failed math normalization at annotation intake.
+
+    The 5xx status makes pyramid_tm roll the create back (nothing is persisted with a raw
+    quote); the client shows a toast and Save is the retry.
+    """
+    diagnostic_id = str(uuid4())
+    log.error(
+        "math normalization request failed [diagnostic_id=%s]: %s",
+        diagnostic_id,
+        context,
+    )
+    request.response.status_code = 500
+    return {
+        "status": "failure",
+        "code": "math_normalization_failed",
+        "description": (
+            "The annotation was not saved because its selected math could not be "
+            "recovered. Check that the document is reachable, then retry."
+        ),
+        "reason": str(context),
+        "retryable": True,
+        "diagnostic_id": diagnostic_id,
+    }
 
 
 @json_view(context=JSONAPIError, path_info="/api/bulk", decorator=cors_policy)

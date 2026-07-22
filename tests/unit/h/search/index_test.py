@@ -46,6 +46,16 @@ class TestBatchIndexer:
             with pytest.raises(NotFoundError):
                 get_indexed_ann(_id)
 
+    def test_it_indexes_every_annotation_when_ids_are_omitted(
+        self, batch_indexer, factories, get_indexed_ann
+    ):
+        annotations = factories.Annotation.create_batch(3)
+
+        batch_indexer.index(None)
+
+        for annotation in annotations:
+            assert get_indexed_ann(annotation.id) is not None
+
     def test_it_does_not_index_deleted_annotations(
         self, batch_indexer, factories, get_indexed_ann
     ):

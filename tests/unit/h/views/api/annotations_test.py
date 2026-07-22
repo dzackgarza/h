@@ -5,6 +5,7 @@ from pyramid.httpexceptions import HTTPNotFound
 from webob.multidict import MultiDict, NestedMultiDict
 
 from h.search.core import SearchResult
+from h.services.normalization import NormalizationService
 from h.traversal import AnnotationContext
 from h.views.api import annotations as views
 from h.views.api.exceptions import PayloadError
@@ -122,6 +123,42 @@ class TestCreate:
     def test_it_raises_for_invalid_json(self, pyramid_request):
         with pytest.raises(PayloadError):
             views.create(pyramid_request)
+
+    @pytest.mark.usefixtures("annotation_json_service", "AnnotationEvent")
+    def test_it_normalizes_the_new_annotation_in_the_transaction(
+        self,
+        pyramid_request,
+        CreateAnnotationSchema,
+        annotation_write_service,
+        normalization_service,
+    ):
+        CreateAnnotationSchema.return_value.validate.return_value = {
+            "references": [],
+            "target_selectors": [{"type": "TextQuoteSelector", "exact": "the math"}],
+        }
+
+        views.create(pyramid_request)
+
+        # Normalization runs on the created annotation, inside the request transaction, so a
+        # failed recovery rolls the whole create back (proven in the functional tests).
+        normalization_service.normalize.assert_called_once_with(
+            annotation_write_service.create_annotation.return_value
+        )
+
+    @pytest.mark.usefixtures("annotation_json_service", "AnnotationEvent")
+    def test_it_allows_a_quote_less_reply(
+        self, pyramid_request, CreateAnnotationSchema, annotation_write_service
+    ):
+        CreateAnnotationSchema.return_value.validate.return_value = {
+            "references": ["parent_id"],
+            "target_selectors": [],
+        }
+
+        views.create(
+            pyramid_request
+        )  # a reply carries no selection; must not be rejected
+
+        annotation_write_service.create_annotation.assert_called_once()
 
     @pytest.fixture
     def pyramid_request(self, pyramid_request):
@@ -285,6 +322,11 @@ class TestReindex:
         )
 
         assert result == {"id": context.annotation.id, "indexed": True}
+
+
+@pytest.fixture(autouse=True)
+def normalization_service(mock_service):
+    return mock_service(NormalizationService)
 
 
 @pytest.fixture
