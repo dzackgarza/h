@@ -9,9 +9,10 @@ name: Recovery guard
 
 on:
   schedule:
-    # Weekly. A mutation survey takes tens of minutes; nightly would mostly re-prove
-    # yesterday's answer.
-    - cron: '0 4 * * 1'
+    # Nightly. The survey takes tens of minutes and answers a question that changes
+    # whenever the recovery or its tests do, which is often enough that a week of silence
+    # is a week of not knowing.
+    - cron: '0 4 * * *'
   workflow_dispatch:
   push:
     paths:
