@@ -521,6 +521,52 @@ class TestRenderHtmlQuoteRealBoundary:
         server.server_close()
 
 
+class TestRenderHtmlQuoteSubprocessContract:
+    """What the recovery hands the render script, and what it accepts back from it.
+
+    The real-boundary tests above prove a Chromium render happens and that a locating
+    miss fails. Neither can see the deadline the script is given, because a render that
+    succeeds succeeds under any deadline long enough -- and the recovery's own setting is
+    in seconds while the script's argument is in milliseconds. That conversion is this
+    repository's, and getting it wrong hands every real page a 30ms budget.
+
+    So this drives a stand-in ``node`` on PATH, which is where `_node_path` looks:
+    `_render_html_quote` runs whole and spawns a real process, and what it sent is read
+    off the argv that process received.
+    """
+
+    def test_the_scripts_deadline_is_the_recovery_timeout_in_milliseconds(
+        self, stand_in_node, monkeypatch
+    ):
+        # The script takes milliseconds. Handing it seconds gives a page load a 30ms
+        # budget and reports the timeout as a recovery failure on every real page.
+        monkeypatch.setenv("H_MATH_NORMALIZE_TIMEOUT", "2")
+        argv = stand_in_node(
+            'printf "%s\\n" "$@" > "$ARGV_FILE"; printf "iVBORw0KGgo="'
+        )
+
+        _render_html_quote("https://ex.com/page", "a selection")
+
+        sent = argv.read_text().split("\n")
+        assert sent[1] == "https://ex.com/page"
+        assert sent[2] == "a selection"
+        assert sent[3] == "2000"
+
+    @pytest.fixture
+    def stand_in_node(self, tmp_path, monkeypatch):
+        """Put a scripted ``node`` first on PATH, where `_node_path` resolves it."""
+
+        def install(body: str, shebang: str = "/bin/sh") -> Path:
+            argv_file = tmp_path / "argv.txt"
+            node = tmp_path / "node"
+            node.write_text(f"#!{shebang}\nARGV_FILE={argv_file}\n{body}\n")
+            node.chmod(0o755)
+            monkeypatch.setenv("PATH", f"{tmp_path}{os.pathsep}{os.environ['PATH']}")
+            return argv_file
+
+        return install
+
+
 class TestSubprocessShutdownGrace:
     """The wrapper's shutdown headroom is configuration, and it is what bounds the call.
 

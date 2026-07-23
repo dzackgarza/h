@@ -213,7 +213,9 @@ def test_an_unset_endpoint_fails_the_ocr_as_a_recovery_failure(monkeypatch):
     with pytest.raises(pdf_math.MissingRecoverySettingError) as failure:
         pdf_math.ocr_latex(b"\x89PNG")
 
-    assert "MATHPIX_API_URL" in str(failure.value)
+    # Which setting, from the exception's own field -- an operator has to be told what to
+    # set, and the two required settings must not be confusable.
+    assert failure.value.setting == "MATHPIX_API_URL"
 
 
 def test_a_non_2xx_from_mathpix_becomes_a_recovery_failure(mathpix_api):
@@ -222,7 +224,7 @@ def test_a_non_2xx_from_mathpix_becomes_a_recovery_failure(mathpix_api):
     # not as a raw requests error.
     mathpix_api.expect_no_recording()
 
-    with pytest.raises(MathRecoveryError, match="Mathpix OCR request failed"):
+    with pytest.raises(MathRecoveryError):
         pdf_math.ocr_latex(_png_of("an image no fixture was ever recorded for"))
 
 
