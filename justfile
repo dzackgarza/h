@@ -36,6 +36,13 @@ _record-pdf-math-fixtures:
 _record-html-selections:
     node tests/corpus/record_html_selections.mjs
 
+# Export what the recovery produces for every drag in the corpus, for the sidebar
+# rendering suite in the client fork to render. No database or network needed: it runs the
+# real extractor against the committed fixture pages.
+[private]
+_export-recovered-quotes:
+    node tests/corpus/export_recovered_quotes.mjs
+
 [private]
 _test-pdf-annotations:
     {{tox}} -qe functests -- tests/functional/api/pdf_math_annotations_test.py
