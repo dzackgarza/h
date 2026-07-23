@@ -14,19 +14,55 @@ import threading
 
 import pymupdf as fitz
 import pytest
-import requests
 
 from h.services import pdf_math
 from h.services.pdf_math import MathRecoveryError
+from tests.common import mathpix
+
+#: What the real Mathpix API returned for the rendered regions below, replayed from
+#: `tests/corpus/mathpix/` and copied here verbatim. Recorded, never hand-written: an
+#: expectation typed by hand is a guess about the OCR, which is what the recording exists
+#: to stop. Re-record with `bin/record_mathpix_fixtures.py` if a region changes.
+RECORDED_RESIDUE = "the residue is some finite data attached here"
+RECORDED_ENDS_IN_MATH = (
+    r"surfaces ( $Z, M$ ) with a 2 -divisible polarization $M=L \cdot 2$"
+)
 
 
-def _doc_with_lines(lines: list[tuple[float, str]]) -> fitz.Document:
+@pytest.fixture
+def mathpix_api(monkeypatch):
+    """Serve the recovery's OCR from responses recorded off the real Mathpix API.
+
+    Nothing here replaces `ocr_latex`: it runs whole, and its request has to satisfy the
+    v3/text contract or the emulator answers 4xx and the test fails. See
+    `tests/common/mathpix.py`.
+    """
+    emulator, server, thread = mathpix.serving()
+    monkeypatch.setenv("MATHPIX_API_URL", emulator.url)
+    monkeypatch.setenv("MATHPIX_API_KEY", "recorded-fixtures")
+    try:
+        yield emulator
+    finally:
+        server.shutdown()
+        thread.join()
+        server.server_close()
+
+
+def _doc_with_lines(
+    lines: list[tuple[float, str]], color: tuple[float, float, float] | None = None
+) -> fitz.Document:
     """Build a one-page PDF with each ``(baseline_y, text)`` drawn at the left margin."""
     doc = fitz.open()
     page = doc.new_page()
     for y, text in lines:
-        page.insert_text((72, y), text, fontsize=11)
+        page.insert_text((72, y), text, fontsize=11, color=color)
     return doc
+
+
+def _png_of(line: str) -> bytes:
+    """Render a page carrying ``line`` -- a real PNG to hand straight to the OCR."""
+    dpi = pdf_math._DPI  # noqa: SLF001 - the render resolution the recovery itself uses
+    return _doc_with_lines([(100, line)])[0].get_pixmap(dpi=dpi).tobytes("png")
 
 
 def test_quote_rect_spans_every_line_the_selection_covers():
@@ -130,23 +166,64 @@ def test_quote_rect_uses_prose_context_for_a_formula_only_exact_quote():
     assert "omega equals the residue formula" in page.get_textbox(rect)
 
 
-def test_clean_pdf_quote_returns_the_ocr_latex(monkeypatch):
-    # The located region is OCR'd; the trimmed OCR LaTeX is what's returned (never the raw
-    # text-layer quote). OCR itself is Mathpix's job, mocked here.
+@pytest.mark.usefixtures("mathpix_api")
+def test_clean_pdf_quote_returns_the_ocr_latex():
+    # The located region is OCR'd; the trimmed OCR text is what's returned (never the raw
+    # text-layer quote). The answer below is what the real API returned for this exact
+    # image, replayed; the OCR's own correctness is Mathpix's, proven out of band.
     doc = _doc_with_lines([(100, "the residue is some finite data attached here")])
     uri = "http://test.invalid/ok.pdf"
     pdf_math._pdf_cache[uri] = doc.tobytes()  # noqa: SLF001 - seed fetch cache: real bytes, no network
-    monkeypatch.setattr(
-        pdf_math,
-        "ocr_latex",
-        lambda _png: r"the residue is $\omega$ some finite data attached",
-    )
 
     result = pdf_math.clean_pdf_quote(
-        uri, 0, "the residue is some finite data attached"
+        uri, 0, "the residue is some finite data attached here"
     )
 
-    assert result == r"the residue is $\omega$ some finite data attached"
+    assert result == RECORDED_RESIDUE
+
+
+def test_the_ocr_request_is_one_mathpix_would_accept(mathpix_api):
+    # What replacing `ocr_latex` with a lambda used to hide: 35 mutations of the request
+    # -- the endpoint replaced with None, the formats corrupted -- survived, because no
+    # test ever built one. The emulator rejects a request Mathpix would reject; this
+    # pins the parts of it the recovery depends on being right.
+    doc = _doc_with_lines([(100, "the residue is some finite data attached here")])
+    uri = "http://test.invalid/request-shape.pdf"
+    pdf_math._pdf_cache[uri] = doc.tobytes()  # noqa: SLF001
+
+    pdf_math.clean_pdf_quote(uri, 0, "the residue is some finite data attached here")
+
+    call = mathpix_api.last()
+    assert call.path == "/v3/text"
+    assert call.headers["app_key"] == "recorded-fixtures"
+    assert call.body["formats"] == ["text"]
+    # The stored quote must paste into a LaTeX document unchanged, and the sidebar
+    # renders it with MathJax: standard delimiters, not Mathpix's default markers.
+    assert call.body["math_inline_delimiters"] == ["$", "$"]
+    assert call.body["math_display_delimiters"] == ["$$", "$$"]
+    assert call.png.startswith(b"\x89PNG")
+
+
+def test_an_unset_endpoint_fails_the_ocr_as_a_recovery_failure(monkeypatch):
+    # Where the paid call goes is deployment configuration, like the timeouts. Unset, the
+    # recovery fails by name rather than posting somewhere unintended.
+    monkeypatch.setenv("MATHPIX_API_KEY", "test-key")
+    monkeypatch.delenv("MATHPIX_API_URL", raising=False)
+
+    with pytest.raises(pdf_math.MissingRecoverySettingError) as failure:
+        pdf_math.ocr_latex(b"\x89PNG")
+
+    assert "MATHPIX_API_URL" in str(failure.value)
+
+
+def test_a_non_2xx_from_mathpix_becomes_a_recovery_failure(mathpix_api):
+    # The emulator answers 409 for an image it has no recording of, which is a real
+    # non-2xx round trip: it must surface as MathRecoveryError (rolling the create back),
+    # not as a raw requests error.
+    mathpix_api.expect_no_recording()
+
+    with pytest.raises(MathRecoveryError, match="Mathpix OCR request failed"):
+        pdf_math.ocr_latex(_png_of("an image no fixture was ever recorded for"))
 
 
 def test_clean_pdf_quote_raises_when_page_is_out_of_range():
@@ -166,11 +243,16 @@ def test_clean_pdf_quote_raises_when_region_cannot_be_located():
         pdf_math.clean_pdf_quote(uri, 0, "a selection that does not occur on this page")
 
 
-def test_clean_pdf_quote_raises_when_ocr_is_empty(monkeypatch):
-    doc = _doc_with_lines([(100, "the residue is some finite data attached here")])
+@pytest.mark.usefixtures("mathpix_api")
+def test_clean_pdf_quote_raises_when_ocr_is_empty():
+    # The words are in the text layer but drawn in white, so the region locates and the
+    # render carries nothing to read: Mathpix answers with empty text, and an empty
+    # recovery must fail rather than store a blank quote over the reader's selection.
+    doc = _doc_with_lines(
+        [(100, "the residue is some finite data attached here")], color=(1, 1, 1)
+    )
     uri = "http://test.invalid/empty.pdf"
     pdf_math._pdf_cache[uri] = doc.tobytes()  # noqa: SLF001
-    monkeypatch.setattr(pdf_math, "ocr_latex", lambda _png: "")
     with pytest.raises(MathRecoveryError, match="empty"):
         pdf_math.clean_pdf_quote(uri, 0, "the residue is some finite data attached")
 
@@ -184,14 +266,12 @@ def test_ocr_latex_raises_math_recovery_error_when_key_missing(monkeypatch):
 
 def test_ocr_latex_wraps_mathpix_request_failure(monkeypatch):
     # A Mathpix network error / timeout / non-2xx must surface as MathRecoveryError, so it
-    # rolls back and logs uniformly rather than leaking a raw requests exception.
+    # rolls back and logs uniformly rather than leaking a raw requests exception. The
+    # endpoint below is a closed port on the loopback: a real failed connection, not an
+    # exception planted in `requests`.
     monkeypatch.setenv("MATHPIX_API_KEY", "test-key")
+    monkeypatch.setenv("MATHPIX_API_URL", "http://127.0.0.1:1/v3/text")
 
-    def _boom(*_args, **_kwargs):
-        msg = "mathpix unreachable"
-        raise requests.ConnectionError(msg)
-
-    monkeypatch.setattr(pdf_math.requests, "post", _boom)
     with pytest.raises(MathRecoveryError, match="Mathpix OCR request failed"):
         pdf_math.ocr_latex(b"\x89PNG")
 
@@ -247,7 +327,8 @@ def test_quote_rect_is_not_shifted_by_punctuation_only_page_words():
     assert "argument" in page.get_textbox(rect)  # the final word is inside the crop
 
 
-def test_clean_pdf_quote_recovers_a_selection_that_ends_in_math(monkeypatch):
+@pytest.mark.usefixtures("mathpix_api")
+def test_clean_pdf_quote_recovers_a_selection_that_ends_in_math():
     # The live failure this reproduces (dzackgarza/h#3): every PDF selection ending in math
     # was rejected with "the quote's trailing words were not found in the OCR output". The
     # quote, the page text and the OCR below are the real ones observed on arXiv 2312.03638
@@ -259,11 +340,6 @@ def test_clean_pdf_quote_recovers_a_selection_that_ends_in_math(monkeypatch):
     )
     uri = "http://test.invalid/ends-in-math.pdf"
     pdf_math._pdf_cache[uri] = doc.tobytes()  # noqa: SLF001
-    ocr = (
-        r"surfaces $(Z, \mathcal{M})$ with a 2 -divisible polarization "
-        r"$\mathcal{M}=\mathcal{L}_{Z}^{\otimes 2}$"
-    )
-    monkeypatch.setattr(pdf_math, "ocr_latex", lambda _png: ocr)
 
     result = pdf_math.clean_pdf_quote(
         uri,
@@ -271,7 +347,10 @@ def test_clean_pdf_quote_recovers_a_selection_that_ends_in_math(monkeypatch):
         "surfaces ( Z,  M )   with   a   2-divisible   polarization   M  =  L ⊗ 2",
     )
 
-    assert result == ocr
+    # What the real API returned for this region: math where the text layer had flattened
+    # glyphs, which is exactly why a trailing-prose anchor could not confirm the recovery.
+    assert result == RECORDED_ENDS_IN_MATH
+    assert "$" in result
 
 
 class TestRecoveryTimeoutSetting:
@@ -284,6 +363,11 @@ class TestRecoveryTimeoutSetting:
     to be used. The two operator mistakes (nothing set, something wrong set) surface as
     different failures, because they call for different fixes.
     """
+
+    @pytest.fixture(autouse=True)
+    def endpoint_configured(self, monkeypatch):
+        """Put the other required setting in place: these tests are about the timeout."""
+        monkeypatch.setenv("MATHPIX_API_URL", "http://127.0.0.1:1/v3/text")
 
     def test_a_malformed_timeout_fails_the_ocr_path_as_a_recovery_failure(
         self, monkeypatch
@@ -326,6 +410,7 @@ class TestRecoveryTimeoutSetting:
 
         assert type(absent.value) is not type(malformed.value)
 
+    @pytest.mark.usefixtures("mathpix_api")
     def test_a_valid_timeout_leaves_the_recovery_working(self, monkeypatch):
         # The paired positive: a well-formed setting is accepted and the recovery runs
         # through to its normal result.
@@ -333,14 +418,9 @@ class TestRecoveryTimeoutSetting:
         doc = _doc_with_lines([(100, "the residue is some finite data attached here")])
         uri = "http://test.invalid/valid-timeout.pdf"
         pdf_math._pdf_cache[uri] = doc.tobytes()  # noqa: SLF001 - seeded bytes, no network
-        monkeypatch.setattr(
-            pdf_math,
-            "ocr_latex",
-            lambda _png: r"the residue is $\omega$ some finite data attached",
-        )
 
         result = pdf_math.clean_pdf_quote(
-            uri, 0, "the residue is some finite data attached"
+            uri, 0, "the residue is some finite data attached here"
         )
 
-        assert result == r"the residue is $\omega$ some finite data attached"
+        assert result == RECORDED_RESIDUE

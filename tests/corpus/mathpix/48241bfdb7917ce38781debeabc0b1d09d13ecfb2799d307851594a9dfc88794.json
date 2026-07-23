@@ -1,0 +1,16 @@
+{
+  "auto_rotate_confidence": 3.439350280132203e-07,
+  "auto_rotate_degrees": 0,
+  "error": "Content not found",
+  "error_info": {
+    "id": "image_no_content",
+    "message": "Content not found"
+  },
+  "image_height": 59,
+  "image_width": 598,
+  "is_handwritten": false,
+  "is_printed": false,
+  "line_data": [],
+  "request_id": "c94765c0-a3cd-4845-89bb-8751b50e3fb4",
+  "version": "SuperNet-200"
+}

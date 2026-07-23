@@ -92,6 +92,20 @@ def recovery_timeout() -> float:
     return _seconds_setting("H_MATH_NORMALIZE_TIMEOUT")
 
 
+def mathpix_endpoint() -> str:
+    """Read the required Mathpix endpoint the OCR posts to, or fail the recovery.
+
+    Where a third-party call goes is the deployment's to state, not a literal buried in
+    the call site: a hard-coded URL cannot be pointed at the recorded-response harness
+    the suite runs against, which is why the whole request-building path had no test.
+    """
+    setting = "MATHPIX_API_URL"
+    url = os.environ.get(setting, "").strip()
+    if not url:
+        raise MissingRecoverySettingError(setting)
+    return url
+
+
 def shutdown_grace() -> float:
     """Seconds a recovery subprocess gets *beyond* its own deadline before being killed.
 
@@ -255,7 +269,7 @@ def ocr_latex(png: bytes) -> str:
         raise MathRecoveryError(msg)
     try:
         resp = requests.post(
-            "https://api.mathpix.com/v3/text",
+            mathpix_endpoint(),
             headers={"app_key": key},
             json={
                 "src": "data:image/png;base64," + base64.b64encode(png).decode(),
