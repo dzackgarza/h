@@ -111,13 +111,25 @@ ELSEWHERE_ON_THE_PAGE = {
     "plain-about.html": "Google Scholar",
 }
 
+#: Which path each drag must be recovered by. `html` is the page's own source, `identity`
+#: is a selection with no mathematics in it, and `ocr` is the paid Mathpix call on a
+#: rendered region. Not one drag here is `ocr`: every real selection on these five pages
+#: is recoverable from the page itself. A drag that quietly moves to OCR still returns the
+#: right text, so nothing else in this module would notice -- it just starts costing money
+#: per annotation, which is exactly how dzackgarza/h#5 went unseen.
+#: A selection with no mathematics in it comes back as it went in.
+PROSE_ONLY = {"katex_prose_only", "mathjax_prose_only", "plain_prose"}
+RECOVERY_PATH = {
+    drag: "identity" if drag in PROSE_ONLY else "html" for drag in SELECTIONS
+}
+
 pytestmark = pytest.mark.usefixtures("init_elasticsearch")
 
 
 class TestAnnotatingAMathematicalWebPage:
     @pytest.mark.parametrize("drag", sorted(SELECTIONS))
     def test_the_reader_gets_back_the_mathematics_they_selected(
-        self, app, token_auth_header, page_url, drag
+        self, app, token_auth_header, page_url, drag, db_session
     ):
         response = app.post_json(
             "/api/annotations",
@@ -126,6 +138,8 @@ class TestAnnotatingAMathematicalWebPage:
         )
 
         assert response.status_code == 200
+        annotation = db_session.get(Annotation, response.json["id"])
+        assert annotation.normalized.method == RECOVERY_PATH[drag]
         quote = response.json["normalized_quote"]
         for latex in MATHEMATICS[drag]:
             assert latex in quote

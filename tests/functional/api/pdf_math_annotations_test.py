@@ -102,13 +102,18 @@ MATHEMATICS = {
     "prose_across_two_lines": [r"\mathcal{X} \rightarrow(C, 0)"],
 }
 
+#: Every PDF region goes through OCR -- there is no text layer to recover authored TeX
+#: from, only glyphs. A drag here recovering by any other path would mean the routing
+#: broke, not that it got cheaper.
+RECOVERY_PATH = dict.fromkeys(SELECTIONS, "ocr")
+
 pytestmark = pytest.mark.usefixtures("init_elasticsearch", "replayed_ocr")
 
 
 class TestAnnotatingAPdf:
     @pytest.mark.parametrize("selection", sorted(SELECTIONS))
     def test_the_reader_gets_back_the_mathematics_they_selected(
-        self, app, token_auth_header, paper_url, selection
+        self, app, token_auth_header, paper_url, selection, db_session
     ):
         page_index, exact = SELECTIONS[selection]
 
@@ -119,6 +124,8 @@ class TestAnnotatingAPdf:
         )
 
         assert response.status_code == 200
+        annotation = db_session.get(Annotation, response.json["id"])
+        assert annotation.normalized.method == RECOVERY_PATH[selection]
         quote = response.json["normalized_quote"]
         for latex in MATHEMATICS[selection]:
             assert latex in quote
