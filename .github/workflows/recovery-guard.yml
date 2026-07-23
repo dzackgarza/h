@@ -34,8 +34,12 @@ env:
   ELASTICSEARCH_INDEX: hypothesis-tests
   AUTHORITY: example.com
   JWT_SIGNING_KEY: dev_jwt_signing_key
-  H_MATH_NORMALIZE_TIMEOUT: '30'
-  H_MATH_NORMALIZE_SHUTDOWN_GRACE: '5'
+  # A cold-starting Chromium on a shared runner is slower than on a workstation, and the
+  # shutdown grace exists for exactly that case -- the module's own comment says so. The
+  # workstation defaults (30/5) time the browser out at 35s and report it as a recovery
+  # failure, which is what stopped the first instrumented survey.
+  H_MATH_NORMALIZE_TIMEOUT: '60'
+  H_MATH_NORMALIZE_SHUTDOWN_GRACE: '30'
 
 jobs:
   Coverage:
