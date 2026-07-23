@@ -171,3 +171,10 @@ pytest_add_cli_args = ["--no-cov"]
 # It runs from a copy of the project rather than mutating the tree in place, so anything
 # the tests reach for has to come along.
 also_copy = ["h", "conf", "bin"]
+# Diagnostic message text is not mutated, because no admissible test could object to the
+# change. A test that asserts on the wording of an error is a banned shape (the message
+# is not the contract; the structured failure is), so mutating `msg = "..."` can only
+# ever produce a survivor that must not be killed -- or, worse, invite a test that pins
+# the wording to make the survivor go away. The failure *types* these messages travel
+# with are mutated as usual, and those are what the tests assert on.
+do_not_mutate_patterns = ["^\\s*msg = "]
