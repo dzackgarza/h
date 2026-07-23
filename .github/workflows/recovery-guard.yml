@@ -1,0 +1,121 @@
+name: Recovery guard
+
+# The math recovery is this fork's reason to exist, and two things about it are invisible
+# in an ordinary test run: whether the tests would notice if the code changed underneath
+# them, and whether the parts of it nobody exercises are growing. Both are slow to measure,
+# so they run here on a schedule rather than in anyone's commit gate -- and both fail the
+# run when they regress, so the failure is a red mark on the repository rather than a
+# number somebody has to go and look up.
+
+on:
+  schedule:
+    # Weekly. A mutation survey takes tens of minutes; nightly would mostly re-prove
+    # yesterday's answer.
+    - cron: '0 4 * * 1'
+  workflow_dispatch:
+  push:
+    paths:
+      # Any change to the recovery itself re-runs the guard on the spot.
+      - 'h/services/normalization.py'
+      - 'h/services/pdf_math.py'
+      - 'h/scripts/html-normalize/**'
+      - '.github/workflows/recovery-guard.yml'
+
+jobs:
+  Coverage:
+    # The repository's own coverage config demands 100%; the test command overrides it with
+    # `--cov-fail-under=0`. Everything except the recovery meets it, so this job holds the
+    # two recovery modules to what they measure today and fails if either slips.
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15.10-alpine
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      elasticsearch:
+        image: hypothesis/elasticsearch:elasticsearch7.10
+        ports:
+          - 9200:9200
+        env:
+          discovery.type: single-node
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - run: python -m pip install 'tox<4'
+      - name: Create the test database
+        run: psql -U postgres -h localhost -p 5432 -c 'CREATE DATABASE h_tests;'
+      - name: Measure the recovery's coverage
+        run: |
+          tox -e tests -- --cov --cov-report=term --cov-fail-under=0 \
+            --numprocesses logical --dist loadgroup tests/unit/ | tee coverage.txt
+      - name: Hold each recovery module to its floor
+        run: python bin/check_recovery_coverage.py coverage.txt
+
+  Mutants:
+    # Does the suite notice when the recovery changes? mutmut edits the source one small
+    # change at a time and reruns the tests; anything that survives is a change to the
+    # recovery that no test objects to.
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    services:
+      postgres:
+        image: postgres:15.10-alpine
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      elasticsearch:
+        image: hypothesis/elasticsearch:elasticsearch7.10
+        ports:
+          - 9200:9200
+        env:
+          discovery.type: single-node
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - run: python -m pip install 'tox<4' mutmut
+      - name: Create the test database
+        run: psql -U postgres -h localhost -p 5432 -c 'CREATE DATABASE h_tests;'
+      - name: Build the test environment mutmut will run against
+        run: tox -e tests --notest
+      - name: Survey the recovery for changes no test objects to
+        id: survey
+        continue-on-error: true
+        env:
+          # The tests mutmut runs are the ones that own these modules. Running the whole
+          # suite per mutant would put this survey in the hours.
+          MUTMUT_TESTS: >-
+            tests/unit/h/services/normalization_test.py
+            tests/unit/h/services/pdf_math_test.py
+            tests/unit/h/services/recovery_paths_test.py
+        run: |
+          mutmut run \
+            --paths-to-mutate h/services/normalization.py,h/services/pdf_math.py \
+            --runner ".tox/tests/bin/python -m pytest -x -q $MUTMUT_TESTS" \
+            --no-progress || true
+          mutmut results > mutants.txt
+      - name: Report what survived
+        run: python bin/report_mutants.py mutants.txt >> "$GITHUB_STEP_SUMMARY"
+      - name: Fail if anything survived
+        run: python bin/report_mutants.py mutants.txt --fail-on-survivors
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mutation-survey
+          path: mutants.txt
