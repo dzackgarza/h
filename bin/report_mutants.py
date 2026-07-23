@@ -30,10 +30,22 @@ def by_outcome(results: str) -> dict[str, list[str]]:
         if line.lstrip().startswith("----"):
             # The per-file rule between id groups is not an id.
             continue
-        grouped[current].extend(
-            part.strip() for part in line.split(",") if part.strip()
-        )
+        grouped[current].extend(expand(line))
     return grouped
+
+
+def expand(line: str) -> list[str]:
+    """Expand one line of mutmut ids, whose consecutive runs are printed as `12-15`."""
+    ids: list[str] = []
+    for part in (piece.strip() for piece in line.split(",")):
+        if not part:
+            continue
+        first, sep, last = part.partition("-")
+        if sep and first.isdigit() and last.isdigit():
+            ids.extend(str(number) for number in range(int(first), int(last) + 1))
+        else:
+            ids.append(part)
+    return ids
 
 
 def summary(grouped: dict[str, list[str]]) -> str:
@@ -74,6 +86,16 @@ def main(argv: list[str]) -> int:
         # read as "nothing survived".
         sys.stdout.write(
             "The survey tested no mutants, so it proves nothing about the recovery.\n"
+        )
+        return 1
+
+    if not grouped.get("killed"):
+        # Every mutant surviving is not a verdict on the tests, it is a broken survey: a
+        # runner with no kill power at all, or a timing model that gave up before it
+        # compared anything. Read the run log, not this number.
+        sys.stdout.write(
+            f"The survey killed nothing out of {tested} mutants, so it is not measuring "
+            "the tests. Check the runner and the per-mutant outcomes in the run log.\n"
         )
         return 1
 

@@ -152,8 +152,8 @@ jobs:
         run: |
           mutmut run \
             --paths-to-mutate h/services/normalization.py,h/services/pdf_math.py \
-            --runner ".tox/tests/bin/python -m pytest -x -q --no-cov tests/unit/h/services/normalization_test.py tests/unit/h/services/pdf_math_test.py tests/unit/h/services/recovery_paths_test.py" \
-            --no-progress
+            --runner ".tox/tests/bin/python -m pytest -x -q --no-cov tests/unit/h/services/normalization_test.py tests/unit/h/services/pdf_math_test.py tests/unit/h/services/recovery_paths_test.py"
+
       - name: Collect what the survey found
         # Its own step, so a survey that ends with findings still produces its results.
         if: always()
