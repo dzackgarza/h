@@ -89,6 +89,14 @@ jobs:
             --numprocesses logical --dist loadgroup tests/unit/ | tee coverage.txt
       - name: Hold each recovery module to its floor
         run: python bin/check_recovery_coverage.py coverage.txt
+      - uses: actions/upload-artifact@v4
+        # Kept for the same reason as the survey's: a number with no record behind it
+        # cannot be argued with later.
+        if: always()
+        with:
+          name: coverage-report
+          retention-days: 90
+          path: coverage.txt
 
   Mutants:
     # Does the suite notice when the recovery changes? mutmut edits the source one small
@@ -169,4 +177,10 @@ jobs:
         if: always()
         with:
           name: mutation-survey
-          path: mutants.txt
+          retention-days: 90
+          include-hidden-files: true
+          path: |
+            mutants.txt
+            mutants.junit.xml
+            mutation-run.log
+            .mutmut-cache
