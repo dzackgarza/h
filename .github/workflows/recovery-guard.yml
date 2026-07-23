@@ -103,9 +103,9 @@ jobs:
           path: coverage.txt
 
   Mutants:
-    # Does the suite notice when the recovery changes? mutmut edits the source one small
-    # change at a time and reruns the tests that own it; anything that survives is a change
-    # to the recovery no test objects to.
+    # Does the suite notice when the recovery changes? mutmut makes one small change at a
+    # time to a copy of the project and reruns the tests that own it; anything that
+    # survives is a change to the recovery no test objects to.
     runs-on: ubuntu-latest
     timeout-minutes: 180
     services:
@@ -141,54 +141,36 @@ jobs:
           npx --yes pnpm@10.14.0 install --dir h/scripts/html-normalize --frozen-lockfile
           PLAYWRIGHT_BROWSERS_PATH="$PWD/.playwright" npx --yes playwright@1.61.1 install chromium
           echo "H_CHROMIUM_PATH=$(find "$PWD/.playwright" -name chrome -type f | head -1)" >> "$GITHUB_ENV"
-      # mutmut 3 dropped --paths-to-mutate/--runner and configures through pyproject; 2.5 is
-      # the CLI these steps are written against, checked against the tool not assumed.
-      - run: python -m pip install 'tox<4' 'mutmut==2.5.1'
-      - name: Create the database the suite runs against
-        run: psql -U postgres -h localhost -p 5432 -c 'CREATE DATABASE h_tests;'
-      - name: Prove the tests pass before mutating anything
-        # This also builds .tox/tests, which `--notest` does not: the dependency install
-        # lives in tox's commands_pre, so skipping it leaves an interpreter with no pytest
-        # and a survey that dies on its baseline run.
+      - name: Build the test environment, and prove it green before mutating anything
+        # mutmut shells out to `python -m pytest`, so it has to live in the same
+        # environment as the tests -- run beside it, it finds none of their dependencies.
         run: |
           tox -e tests -- -q --no-cov \
             tests/unit/h/services/normalization_test.py \
             tests/unit/h/services/pdf_math_test.py \
             tests/unit/h/services/recovery_paths_test.py
+          .tox/tests/bin/pip install mutmut
       - name: Survey the recovery for changes no test objects to
         # mutmut exits non-zero when mutants survive, which is a finding rather than a
-        # broken run -- so this step does not decide the job. The report below does, and it
-        # fails on survivors *and* on a survey that tested nothing, which is what a crashed
-        # run leaves behind.
+        # broken run, so this step does not decide the job. It is configured in
+        # pyproject.toml under [tool.mutmut]; it copies the project to mutants/ and runs
+        # there, so nothing here mutates the checkout.
         continue-on-error: true
-        # Every line the survey emits is kept. An hour of work that reports one number and
-        # discards how it got there cannot be diagnosed afterwards, which is exactly what
-        # happened on the first complete run.
         shell: bash
         run: |
           set -o pipefail
-          mutmut run \
-            --paths-to-mutate h/services/normalization.py,h/services/pdf_math.py \
-            --runner ".tox/tests/bin/python -m pytest -x -q --no-cov tests/unit/h/services/normalization_test.py tests/unit/h/services/pdf_math_test.py tests/unit/h/services/recovery_paths_test.py" \
-            2>&1 | tee mutation-run.log
-
+          .tox/tests/bin/mutmut run --max-children 4 2>&1 | tee mutation-run.log
       - name: Collect what the survey found
-        # Its own step, so a survey that ends with findings still produces its results.
-        # Each artifact answers a different question later: which ids ended where
-        # (mutants.txt), the same per mutant and diffable between runs (junit), and the
-        # cache that lets `mutmut show <id>` reproduce a survivor's diff without re-running
-        # the hour.
         if: always()
         run: |
-          mutmut results > mutants.txt
-          mutmut junitxml > mutants.junit.xml
+          .tox/tests/bin/mutmut export-cicd-stats
+          cp mutants/mutmut-cicd-stats.json mutation-stats.json
+          .tox/tests/bin/mutmut results > mutants.txt
       - name: Report what the survey found
-        # Only when there is a survey to report; a crashed run has no results file, and
-        # the failure to read about is in the step above.
-        if: always() && hashFiles('mutants.txt') != ''
-        run: python bin/report_mutants.py mutants.txt >> "$GITHUB_STEP_SUMMARY"
-      - name: Fail on survivors, and on a survey that tested nothing
-        run: python bin/report_mutants.py mutants.txt --fail-on-survivors
+        if: always() && hashFiles('mutation-stats.json') != ''
+        run: python bin/report_mutants.py mutation-stats.json mutants.txt >> "$GITHUB_STEP_SUMMARY"
+      - name: Fail on survivors, on a survey that tested nothing, and on one that killed nothing
+        run: python bin/report_mutants.py mutation-stats.json mutants.txt --fail-on-survivors
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -196,7 +178,6 @@ jobs:
           retention-days: 90
           include-hidden-files: true
           path: |
+            mutation-stats.json
             mutants.txt
-            mutants.junit.xml
             mutation-run.log
-            .mutmut-cache

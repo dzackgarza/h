@@ -157,3 +157,17 @@ module = [
   "h.migrations.*",
 ]
 ignore_errors = true
+
+[tool.mutmut]
+# The fork's own recovery code; the rest of h is upstream's and upstream's suite covers it.
+source_paths = ["h/services/normalization.py", "h/services/pdf_math.py"]
+# mutmut runs pytest itself, against the tests that own those modules.
+pytest_add_cli_args_test_selection = [
+    "tests/unit/h/services/normalization_test.py",
+    "tests/unit/h/services/pdf_math_test.py",
+    "tests/unit/h/services/recovery_paths_test.py",
+]
+pytest_add_cli_args = ["--no-cov"]
+# It runs from a copy of the project rather than mutating the tree in place, so anything
+# the tests reach for has to come along.
+also_copy = ["h", "conf", "bin"]
