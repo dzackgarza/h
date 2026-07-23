@@ -140,6 +140,7 @@ def _html_source_extract(
             capture_output=True,
             text=True,
             timeout=recovery_timeout(),
+            check=False,
         )
     except (OSError, subprocess.SubprocessError) as exc:
         msg = f"html-normalize subprocess failed: {exc}"
@@ -167,6 +168,7 @@ def _render_html_quote(uri: str, exact: str) -> bytes:
             # The script is given the recovery timeout as its own deadline (above); it
             # gets that long plus the declared shutdown headroom before being killed.
             timeout=subprocess_timeout(),
+            check=False,
         )
     except (OSError, subprocess.SubprocessError) as exc:
         msg = f"HTML rendered-region capture failed: {exc}"

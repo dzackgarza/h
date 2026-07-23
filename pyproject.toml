@@ -177,4 +177,8 @@ also_copy = ["h", "conf", "bin"]
 # ever produce a survivor that must not be killed -- or, worse, invite a test that pins
 # the wording to make the survivor go away. The failure *types* these messages travel
 # with are mutated as usual, and those are what the tests assert on.
-do_not_mutate_patterns = ["^\\s*msg = "]
+# `check=False` is likewise excluded, and for the same reason from the other direction:
+# it is subprocess.run's own default, so mutating it changes nothing that any test could
+# observe -- but ruff (PLW1510) requires it to be written explicitly. Code shape is
+# global QC's to decide; a mutant on a line QC mandates is not a proof burden.
+do_not_mutate_patterns = ["^\\s*msg = ", "^\\s*check=False,$"]
