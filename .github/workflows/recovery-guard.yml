@@ -71,8 +71,9 @@ jobs:
           node-version: '20'
       - name: Install what the recovery's real boundaries need
         run: |
-          corepack enable
-          pnpm install --dir h/scripts/html-normalize --frozen-lockfile
+          # Not corepack: the root package.json declares yarn as its packageManager, so
+          # corepack refuses to run pnpm here. The extractor's own tree is a pnpm one.
+          npx --yes pnpm@10.14.0 install --dir h/scripts/html-normalize --frozen-lockfile
           PLAYWRIGHT_BROWSERS_PATH="$PWD/.playwright" npx --yes playwright@1.61.1 install chromium
           echo "H_CHROMIUM_PATH=$(find "$PWD/.playwright" -name chrome -type f | head -1)" >> "$GITHUB_ENV"
       - run: python -m pip install 'tox<4'
@@ -121,8 +122,9 @@ jobs:
           node-version: '20'
       - name: Install what the recovery's real boundaries need
         run: |
-          corepack enable
-          pnpm install --dir h/scripts/html-normalize --frozen-lockfile
+          # Not corepack: the root package.json declares yarn as its packageManager, so
+          # corepack refuses to run pnpm here. The extractor's own tree is a pnpm one.
+          npx --yes pnpm@10.14.0 install --dir h/scripts/html-normalize --frozen-lockfile
           PLAYWRIGHT_BROWSERS_PATH="$PWD/.playwright" npx --yes playwright@1.61.1 install chromium
           echo "H_CHROMIUM_PATH=$(find "$PWD/.playwright" -name chrome -type f | head -1)" >> "$GITHUB_ENV"
       # mutmut 3 dropped --paths-to-mutate/--runner and configures through pyproject; 2.5 is
@@ -147,7 +149,9 @@ jobs:
             --no-progress
           mutmut results > mutants.txt
       - name: Report what the survey found
-        if: always()
+        # Only when there is a survey to report; a crashed run has no results file, and
+        # the failure to read about is in the step above.
+        if: always() && hashFiles('mutants.txt') != ''
         run: python bin/report_mutants.py mutants.txt >> "$GITHUB_STEP_SUMMARY"
       - name: Fail on survivors, and on a survey that tested nothing
         run: python bin/report_mutants.py mutants.txt --fail-on-survivors
