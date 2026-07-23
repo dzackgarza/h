@@ -144,14 +144,20 @@ jobs:
             tests/unit/h/services/pdf_math_test.py \
             tests/unit/h/services/recovery_paths_test.py
       - name: Survey the recovery for changes no test objects to
-        # No `|| true`: a survey that cannot run is a failed job, not an empty result that
-        # reads as clean.
+        # mutmut exits non-zero when mutants survive, which is a finding rather than a
+        # broken run -- so this step does not decide the job. The report below does, and it
+        # fails on survivors *and* on a survey that tested nothing, which is what a crashed
+        # run leaves behind.
+        continue-on-error: true
         run: |
           mutmut run \
             --paths-to-mutate h/services/normalization.py,h/services/pdf_math.py \
             --runner ".tox/tests/bin/python -m pytest -x -q --no-cov tests/unit/h/services/normalization_test.py tests/unit/h/services/pdf_math_test.py tests/unit/h/services/recovery_paths_test.py" \
             --no-progress
-          mutmut results > mutants.txt
+      - name: Collect what the survey found
+        # Its own step, so a survey that ends with findings still produces its results.
+        if: always()
+        run: mutmut results > mutants.txt
       - name: Report what the survey found
         # Only when there is a survey to report; a crashed run has no results file, and
         # the failure to read about is in the step above.
