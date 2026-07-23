@@ -11,11 +11,17 @@ the repair list picked up -- rather than the table's totals, which belong to wha
 the suite has created.
 """
 
+import uuid
+
 import pytest
 
 from h.services.normalization import NormalizationService, RecoveryPaths
 
 
+# The report reads every annotation in the deployment. Against a database several workers
+# are writing to at once, that read and their inserts deadlock each other, so this module's
+# tests are pinned to one worker and run together rather than alongside the writes.
+@pytest.mark.xdist_group("recovery-paths")
 class TestRecoveryPaths:
     def test_it_counts_the_path_every_annotation_was_recovered_by(
         self, svc, factories, db_session
@@ -88,6 +94,9 @@ class TestRecoveryPaths:
         assert paths.ocr_share == 0.0
 
     def annotation(self, factories, quote, uri, page=None):
+        # Every URI is unique to its test: creating an annotation creates a `document_uri`
+        # row, and two parallel workers inserting the same URI deadlock on its unique index.
+        uri = f"{uri}#{uuid.uuid4().hex}"
         selectors = [{"type": "TextQuoteSelector", "exact": quote}]
         if page is not None:
             selectors.append({"type": "PageSelector", "index": page})

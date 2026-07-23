@@ -297,6 +297,10 @@ class NormalizationService:
         return (
             select(Annotation)
             .outerjoin(AnnotationNormalized)
+            # The caller reads `annotation.normalized` for every row it gets back; without
+            # this that is one query per row, which on a whole-table walk is both slow and
+            # a long window for a concurrent writer to collide with.
+            .options(orm.contains_eager(Annotation.normalized))
             .where(
                 or_(
                     AnnotationNormalized.id.is_(None),
