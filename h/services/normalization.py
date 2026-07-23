@@ -27,7 +27,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
-from sqlalchemy import or_, orm, select
+from sqlalchemy import func, or_, orm, select
 
 from h.models import Annotation, AnnotationNormalized
 from h.models.document import DocumentURI
@@ -53,6 +53,32 @@ _HTML_RENDER = (
 class ReconciliationResult:
     normalized: int
     failures: list[tuple[str, str]]
+
+
+@dataclass(frozen=True)
+class RecoveryPaths:
+    """How this deployment's stored annotations were recovered.
+
+    ``counts`` is the path distribution; ``needs_reconciliation`` is every annotation whose
+    stored recovery the current contract would no longer produce -- exactly what
+    ``reconcile_missing`` repairs, so the report cannot drift from the repair.
+    """
+
+    counts: dict[str, int]
+    needs_reconciliation: list[str]
+
+    @property
+    def ocr_share(self) -> float:
+        """The share of recoveries that took the paid third-party path.
+
+        Source recovery is free and OCR is a call per annotation, so this is the number
+        that moves when a page shape stops being recoverable from its own source -- the
+        symptom of that regression, before anyone reads any code.
+        """
+        total = sum(self.counts.values())
+        if not total:
+            return 0.0
+        return self.counts.get("ocr", 0) / total
 
 
 def _node_path() -> str:
@@ -229,6 +255,25 @@ class NormalizationService:
                     normalized += 1
         return ReconciliationResult(normalized=normalized, failures=failures)
 
+    def recovery_paths(self) -> RecoveryPaths:
+        """Report how stored annotations were recovered, and which need repairing."""
+        rows = self._session.execute(
+            select(
+                AnnotationNormalized.method, func.count(AnnotationNormalized.id)
+            ).group_by(AnnotationNormalized.method)
+        ).all()
+        counts: dict[str, int] = {str(method): int(count) for method, count in rows}
+        # The repair path streams its candidates because it can walk the whole table and
+        # mutate as it goes. A report only reads, and holding a streamed cursor open over
+        # that scan deadlocks against concurrent writers, so it takes the same rows in one
+        # go -- through the same statement and the same skip, so the two cannot drift.
+        needing = [
+            annotation.id
+            for annotation in self._session.scalars(self._reconciliation_statement())
+            if not self._is_valid_identity(annotation)
+        ]
+        return RecoveryPaths(counts=counts, needs_reconciliation=needing)
+
     def _reconcile(self, annotation: Annotation) -> AnnotationNormalized | None:
         if annotation.normalized is None:
             return self.normalize(annotation)
@@ -241,8 +286,15 @@ class NormalizationService:
         annotation.normalized.method = method
         return annotation.normalized
 
-    def _reconciliation_candidates(self, limit: int | None):
-        statement = (
+    @staticmethod
+    def _reconciliation_statement():
+        """Annotations whose stored recovery this version would not produce.
+
+        Either no normalized row at all, or one carrying a method the current recovery
+        never writes. `identity` is listed because it is invalid for a PDF, which
+        `_is_valid_identity` then decides per row -- it cannot be expressed here.
+        """
+        return (
             select(Annotation)
             .outerjoin(AnnotationNormalized)
             .where(
@@ -253,6 +305,23 @@ class NormalizationService:
             )
             .order_by(Annotation.created)
         )
+
+    @staticmethod
+    def _is_valid_identity(annotation: Annotation) -> bool:
+        """Whether this row's `identity` is the recovery the current version would produce.
+
+        `identity` is what an HTML selection with no mathematics recovers to, and is
+        invalid for a PDF region, which always goes through OCR.
+        """
+        normalized = annotation.normalized
+        return (
+            normalized is not None
+            and normalized.method == "identity"
+            and _page_index(annotation) is None
+        )
+
+    def _reconciliation_candidates(self, limit: int | None):
+        statement = self._reconciliation_statement()
         count = 0
         # Stream in batches: the candidate set (every annotation without a valid row) can
         # exceed memory if fetched eagerly, and a SQL LIMIT cannot be used because the
@@ -260,12 +329,7 @@ class NormalizationService:
         for annotation in self._session.scalars(
             statement.execution_options(yield_per=100)
         ):
-            normalized = annotation.normalized
-            if (
-                normalized is not None
-                and normalized.method == "identity"
-                and _page_index(annotation) is None
-            ):
+            if self._is_valid_identity(annotation):
                 continue
             yield annotation
             count += 1

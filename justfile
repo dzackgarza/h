@@ -72,6 +72,37 @@ _test-normalize-annotations-cli:
 _test-search-reindex:
     {{tox}} -qe tests -- tests/unit/h/cli/commands/search_test.py tests/unit/h/search/index_test.py
 
+# Report how stored annotations were recovered: the path distribution, the share that
+# took the paid OCR call, and any annotation holding a recovery this version would not
+# produce. Reads the running dev web process's environment for the database.
+[script(".tox/dev/bin/python")]
+recovery-report:
+    import os
+    from pathlib import Path
+
+    for command_path in Path("/proc").glob("[0-9]*/cmdline"):
+        try:
+            command = command_path.read_bytes()
+        except (FileNotFoundError, PermissionError, ProcessLookupError):
+            continue
+        if b"gunicorn\x00--paste\x00conf/development.ini" not in command:
+            continue
+        for entry in command_path.with_name("environ").read_bytes().split(b"\x00"):
+            if entry:
+                key, value = entry.split(b"=", 1)
+                os.environ[key.decode()] = value.decode()
+        os.execv(
+            ".tox/dev/bin/python",
+            [
+                ".tox/dev/bin/python",
+                "-m",
+                "h",
+                "--dev",
+                "recovery-report",
+            ],
+        )
+    raise RuntimeError("running h development web process not found")
+
 [private]
 [script(".tox/dev/bin/python")]
 _normalize-existing-annotations:
