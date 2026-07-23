@@ -77,6 +77,8 @@ jobs:
           PLAYWRIGHT_BROWSERS_PATH="$PWD/.playwright" npx --yes playwright@1.61.1 install chromium
           echo "H_CHROMIUM_PATH=$(find "$PWD/.playwright" -name chrome -type f | head -1)" >> "$GITHUB_ENV"
       - run: python -m pip install 'tox<4'
+      - name: Create the database the suite runs against
+        run: psql -U postgres -h localhost -p 5432 -c 'CREATE DATABASE h_tests;'
       - name: Measure the recovery's coverage
         # pipefail, or a failing suite is invisible: without it the step reports tee's
         # status and the floor check scores a partial measurement.
@@ -130,6 +132,8 @@ jobs:
       # mutmut 3 dropped --paths-to-mutate/--runner and configures through pyproject; 2.5 is
       # the CLI these steps are written against, checked against the tool not assumed.
       - run: python -m pip install 'tox<4' 'mutmut==2.5.1'
+      - name: Create the database the suite runs against
+        run: psql -U postgres -h localhost -p 5432 -c 'CREATE DATABASE h_tests;'
       - name: Prove the tests pass before mutating anything
         # This also builds .tox/tests, which `--notest` does not: the dependency install
         # lives in tox's commands_pre, so skipping it leaves an interpreter with no pytest
