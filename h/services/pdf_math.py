@@ -8,8 +8,11 @@ region.
 A Hypothesis PDF annotation carries the page (``PageSelector.index``) and the selected
 text. We fetch the PDF, render that page, crop the bounding box of the selection --
 located from the page's own words, so every line it spans is captured at the text
-column's width -- and OCR the crop with Mathpix -> clean ``$…$`` LaTeX. The stored
-selectors (anchoring) are never touched; only the normalized copy carries the recovery.
+column's width -- and OCR the crop with Mathpix -> clean ``$…$`` LaTeX. The crop errs
+toward including a neighbouring word rather than clipping the selection: the quote is
+read to recognise and navigate back to an annotation, so over-capture costs nothing and
+under-capture loses the thing selected. The stored selectors (anchoring) are never
+touched; only the normalized copy carries the recovery.
 """
 
 from __future__ import annotations
@@ -89,27 +92,18 @@ def recovery_timeout() -> float:
     return _seconds_setting("H_MATH_NORMALIZE_TIMEOUT")
 
 
-def shutdown_grace() -> float:
-    """Seconds a recovery subprocess gets *beyond* its own deadline before being killed.
+def mathpix_endpoint() -> str:
+    """Read the required Mathpix endpoint the OCR posts to, or fail the recovery.
 
-    The Node wrappers are handed ``recovery_timeout()`` as the deadline for the work they
-    supervise (a page load, a render). This is the headroom on top of it: without any, the
-    wrapper is killed at the same instant its own work times out, so a browser that is
-    merely slow to start -- cold cache, loaded hardware -- is reported as a recovery
-    timeout. It is configurable precisely so an operator hitting spurious timeouts can
-    raise it without inflating the recovery timeout, which is a different knob with
-    different consequences.
+    Where a third-party call goes is the deployment's to state, not a literal buried in
+    the call site: a hard-coded URL cannot be pointed at the recorded-response harness
+    the suite runs against, which is why the whole request-building path had no test.
     """
-    return _seconds_setting("H_MATH_NORMALIZE_SHUTDOWN_GRACE")
-
-
-def subprocess_timeout() -> float:
-    """Wall-clock limit for a recovery subprocess: its work's deadline plus the headroom.
-
-    The single place the two settings are combined, so no call site recomputes the
-    relationship.
-    """
-    return recovery_timeout() + shutdown_grace()
+    setting = "MATHPIX_API_URL"
+    url = os.environ.get(setting, "").strip()
+    if not url:
+        raise MissingRecoverySettingError(setting)
+    return url
 
 
 def _norm(text: str) -> str:
@@ -148,15 +142,14 @@ def _projected_bounds(forms: list[str], words: list[str]) -> tuple[int, int] | N
     return (max(0, start), min(len(forms) - 1, end))
 
 
-def _quote_rect(
+def _selection_word_rects(
     page: fitz.Page, exact: str, prefix: str = "", suffix: str = ""
-) -> fitz.Rect | None:
-    """Locate the annotated text's bounding box on ``page`` -- every line, at column width.
+) -> list[fitz.Rect] | None:
+    """Locate the page's own words that the selection covers, in reading order.
 
     Located from the quote's own words: its prose anchors the two ends (the math between
     need not match the flattened glyphs), so a multi-line selection is captured whole, not
-    collapsed to the single middle strip a prefix/suffix bracket can produce, and the
-    column-tight width excludes marginal ink (e.g. arXiv's vertical id stamp). ``None`` when
+    collapsed to the single middle strip a prefix/suffix bracket can produce. ``None`` when
     the quote can't be located, so the caller keeps the raw text rather than OCR the wrong
     region.
     """
@@ -188,42 +181,56 @@ def _quote_rect(
         start, end = bounds
     if start > end:
         return None
-    rects = [entries[i][1] for i in range(start, end + 1)]
-    pad = 2.0
+    return [entries[i][1] for i in range(start, end + 1)]
+
+
+# Breathing room around the crop, so ascenders and descenders are not shaved off the
+# rendered region.
+_PAD = 2.0
+
+
+def _quote_rect(
+    page: fitz.Page, exact: str, prefix: str = "", suffix: str = ""
+) -> fitz.Rect | None:
+    """Locate the annotated text on ``page`` -- every line it spans, at column width.
+
+    The column-tight width excludes marginal ink (e.g. arXiv's vertical id stamp).
+    """
+    rects = _selection_word_rects(page, exact, prefix=prefix, suffix=suffix)
+    if rects is None:
+        return None
     return fitz.Rect(
-        max(page.rect.x0, min(r.x0 for r in rects) - pad),
-        max(page.rect.y0, min(r.y0 for r in rects) - pad),
-        min(page.rect.x1, max(r.x1 for r in rects) + pad),
-        min(page.rect.y1, max(r.y1 for r in rects) + pad),
+        max(page.rect.x0, min(r.x0 for r in rects) - _PAD),
+        max(page.rect.y0, min(r.y0 for r in rects) - _PAD),
+        min(page.rect.x1, max(r.x1 for r in rects) + _PAD),
+        min(page.rect.y1, max(r.y1 for r in rects) + _PAD),
     )
 
 
-def _trim_to_quote(ocr: str, exact: str) -> str:
-    """Trim OCR output back to the annotated span, or raise when it cannot be bounded.
+def _selection_png(
+    page: fitz.Page, exact: str, prefix: str = "", suffix: str = ""
+) -> bytes | None:
+    """Render the image to OCR: the box the selection occupies, at column width.
 
-    The crop is full column width, so its last line can run past the selection into the
-    next sentence; cut after the quote's trailing prose, keeping the math before it. When
-    the quote offers no usable prose anchor (fewer than three recognizable words) or its
-    trailing words cannot be located in the OCR output, the crop cannot be bounded to the
-    selection -- returning it untrimmed would persist neighboring text as if it were the
-    selection, so both cases raise instead (hypothesis-review#7: fail loud, never
-    fail open).
+    Deliberately generous at the edges. The box spans whole lines, so its first line can
+    begin before the selection starts and its last can run past where it ends, and both
+    remainders are OCR'd along with the selection.
+
+    That is the cheap error to make. The recovered quote is what the reader is shown to
+    recognise an annotation by and navigate back to it in the document; a few words of the
+    neighbouring sentence carried along cost nothing, while every attempt to cut the region
+    back to the selection exactly has cost either the annotation or the formula. Trimming
+    the OCR text by its leading and trailing words rejected any selection that began or
+    ended in math (dzackgarza/h#3), because those words are flattened glyphs and the OCR
+    returns LaTeX. Painting the remainders out of the render erased a formula's superscript
+    where reading order put it right of the selection's last word, and erased a symbol that
+    dipped into the line below. Under-capture loses what the reader selected; over-capture
+    does not.
     """
-    qtokens = [t for t in exact.split() if _norm(t)]
-    if len(qtokens) < 3:
-        msg = "OCR trim failed: the quote has too few recognizable words to bound the crop"
-        raise MathRecoveryError(msg)
-    head_core = [re.escape(t.strip(".,;:()[]-")) for t in qtokens[:3]]
-    head = re.search(r"\W+".join(head_core), ocr, re.IGNORECASE)
-    if not head:
-        msg = "OCR trim failed: the quote's leading words were not found in the OCR output"
-        raise MathRecoveryError(msg)
-    tail_core = [re.escape(t.strip(".,;:()[]-")) for t in qtokens[-3:]]
-    tail = list(re.finditer(r"\W+".join(tail_core) + r"[.,;:)\]]*", ocr, re.IGNORECASE))
-    if not tail or tail[-1].end() <= head.start():
-        msg = "OCR trim failed: the quote's trailing words were not found in the OCR output"
-        raise MathRecoveryError(msg)
-    return ocr[head.start() : tail[-1].end()].strip()
+    rect = _quote_rect(page, exact, prefix=prefix, suffix=suffix)
+    if rect is None:
+        return None
+    return page.get_pixmap(dpi=_DPI, clip=rect).tobytes("png")
 
 
 def ocr_latex(png: bytes) -> str:
@@ -239,7 +246,7 @@ def ocr_latex(png: bytes) -> str:
         raise MathRecoveryError(msg)
     try:
         resp = requests.post(
-            "https://api.mathpix.com/v3/text",
+            mathpix_endpoint(),
             headers={"app_key": key},
             json={
                 "src": "data:image/png;base64," + base64.b64encode(png).decode(),
@@ -306,13 +313,12 @@ def clean_pdf_quote(
         if not 0 <= page_index < doc.page_count:
             msg = f"PDF page {page_index} is out of range (0..{doc.page_count - 1})"
             raise MathRecoveryError(msg)
-        rect = _quote_rect(doc[page_index], exact, prefix=prefix, suffix=suffix)
-        if rect is None:
+        png = _selection_png(doc[page_index], exact, prefix=prefix, suffix=suffix)
+        if png is None:
             msg = "PDF region could not be located for the quote"
             raise MathRecoveryError(msg)
-        png = doc[page_index].get_pixmap(dpi=_DPI, clip=rect).tobytes("png")
     ocr = ocr_latex(png)
     if not ocr.strip():
         msg = "OCR returned empty output for the PDF region"
         raise MathRecoveryError(msg)
-    return _trim_to_quote(ocr, exact)
+    return ocr.strip()

@@ -1,0 +1,74 @@
+{
+  "ar5iv_prose_and_inline_math": {
+    "page": "ar5iv-enriques.html",
+    "quote": "Enriques surfaces are quotients of K3 surfaces by basepoint free\ninvolutions. They satisfy $2K\\sim 0$ and $q=0$ and occupy a place\nsomewhere in between rational and K3 surfaces. Unlike K3 surfaces,\nthere are only finitely many moduli spaces of polarized Enriques surfaces, see\n[GH16]. Each of them parameterizes the\nsame surfaces, with some finite data attached."
+  },
+  "ar5iv_paragraph_of_definitions": {
+    "page": "ar5iv-enriques.html",
+    "quote": "In this paper we consider the moduli space $F_{\\rm En,2}$ of pairs\n$(Z,[{\\mathcal{L}}_{Z}])$, where $Z$ is an Enriques surface with $ADE$\nsingularities and $[{\\mathcal{L}}_{Z}]\\in\\operatorname{Pic}Z/{\\mathbb{Z}}_{2}$ is an ample numerical\npolarization of degree $2$. Equivalently, this is the moduli space of\n$ADE$ Enriques surfaces $(Z,{\\mathcal{M}})$ with a $2$-divisible polarization\n${\\mathcal{M}}={\\mathcal{L}}_{Z}^{\\otimes 2}\\in\\operatorname{Pic}Z$ of degree $8$.\nThe Baily-Borel compactification ${\\overline{F}}_{\\rm En,2}^{\\rm BB}$ of this space was\ndescribed by Sterk [Ste91]."
+  },
+  "ar5iv_theorem_statement": {
+    "page": "ar5iv-enriques.html",
+    "quote": "The normalization of ${\\overline{F}}_{\\rm En,2}$ is a semitoroidal\ncompactification ${\\overline{F}}_{\\rm En,2}^{\\mathfrak{F}}$\ncorresponding to a collection\n${\\mathfrak{F}}=\\{{\\mathfrak{F}}^{k}\\}_{k=1,2,3,4,5}$ of explicit semifans, one\nfor each $0$-cusp of $F_{\\rm En,2}$, and it is dominated by a toroidal\ncompactification ${\\overline{F}}_{\\rm En,2}^{\\rm cox}$ for a collection\n${\\mathfrak{F}}_{\\rm cox}=\\{{\\mathfrak{F}}^{k}_{\\rm cox}\\}_{k=1,2,3,4,5}$ of Coxeter fans."
+  },
+  "ar5iv_drag_through_a_commutative_diagram": {
+    "page": "ar5iv-enriques.html",
+    "quote": "Consider a surface $Y={\\mathbb{P}}^{1}\\times{\\mathbb{P}}^{1}$ with an involution\n$\\tau\\colon(x,y)\\to(-x,-y)$ and quotient $W=Y/\\tau$. Let\n$B\\in|-2K_{Y}|$ be a $\\tau$-invariant divisor with at worst $ADE$\nsingularities not passing through the four points with\n$x,y\\in\\{0,\\infty\\}$ fixed by $\\tau$. The double cover\n$\\pi\\colon X\\to Y$ branched in $B$ is a K3 surface with a del\nPezzo involution $\\iota_{{\\rm dP}}$ so that $Y=X/\\iota_{{\\rm dP}}$. The involution\n$\\tau$ on $Y$ lifts to a basepoint-free Enriques involution\n$\\iota_{{\\rm En}}$ on $X$ commuting with $\\iota_{{\\rm dP}}$ and the quotient $Z=X/\\iota_{{\\rm En}}$ is an\nEnriques surface. The second lift of $\\tau$ is a Nikulin involution\nand the quotient $Z^{\\prime}=X/\\iota_{{\\rm Nik}}$ is a K3 surface with eight $A_{1}$\nsingularities and possibly more. This gives the following commutative\ndiagram:\n\n\n\n(1)\n\n${X}$${Z}$${Z^{\\prime}}$${Y}$${W}$$\\scriptstyle{\\pi}$$\\scriptstyle{\\psi}$$\\scriptstyle{\\psi^{\\prime}}$$\\scriptstyle{\\rho}$$\\scriptstyle{\\rho^{\\prime}}$$\\scriptstyle{\\varphi}$\n\n\n"
+  },
+  "mathjax_prose_only": {
+    "page": "mathjax-category-theory.html",
+    "quote": "This is meant to be a relatively short and non-rigorous introduction to Category Theory. Although I will be defining and using a lot of the technical terminology that is commonly used, this talk is primarily aimed at introducing these concepts, why they exist, and where they’re useful and commonly used."
+  },
+  "mathjax_inline_math": {
+    "page": "mathjax-category-theory.html",
+    "quote": "In particular, we have $\\text{dim}~V^* = n$, so $V^* \\cong R^n \\cong V$. So $V$ is isomorphic to its dual."
+  },
+  "mathjax_custom_macro": {
+    "page": "mathjax-category-theory.html",
+    "quote": "So $V$ is isomorphic to $V\\dual$, and it is also isomorphic to $V^{\\vee\\vee}$. \nHowever, when one goes through the process of actually finding and constructing these bijections, one finds that the map from $V \\rightarrow V\\dual$ depends on choosing a basis for $V$. On the other hand, the map from $V$ to $V^{\\vee\\vee}$ requires no such choice. In this way, we say that $V$ is isomorphic to its dual, but $V$ is naturally isomorphic to it’s double dual. This idea of “naturality” is part of what category theory sets out to make precise."
+  },
+  "mathjax_display_math": {
+    "page": "mathjax-category-theory.html",
+    "quote": "\n\n$$\\begin{align*}\n0+1 &= 1+0 = 1 \\\\ \n0+0 &= 1+1 = 0\n\\end{align*}$$\n"
+  },
+  "stackexchange_question_with_inline_math": {
+    "page": "mathjax-stackexchange.html",
+    "quote": "I know that $C[0,1]$, as a topological space induced by the metric $d(f,g)=\\sup_x |f(x)-g(x)|$, is Hausdorff, second countable, and has cardinality same as $\\mathbb R$. But is it a manifold?"
+  },
+  "stackexchange_answer_across_paragraphs": {
+    "page": "mathjax-stackexchange.html",
+    "quote": "I know that $C[0,1]$, as a topological space induced by the metric $d(f,g)=\\sup_x |f(x)-g(x)|$, is Hausdorff, second countable, and has cardinality same as $\\mathbb R$. But is it a manifold?\n\nBy manifold, I mean a topological space that is Hausdorff and second countable. The chart map from an open neighbourhood of a point in $C[0,1]$ to a open $n$ dimensional euclidean space. Is $C[0,1]$ a manifold? What is the dimension? \n    \n\n            \n                \n                    \n                        \n                        functional-analysismanifoldsbanach-spacesnormed-spaces\n                    \n                \n            \n\n    \n        \n            \n                \n\n\n\n\n    \n\n        \n            Share\n        \n\n            \n                Cite\n            \n\n\n                \n                    \n                        Follow\n                        \n                    \n                \n\n\n\n\n\n\n    \n    \n\n\n            \n\n                \n\n    \n        \n            edited Jan 4, 2016 at 6:57\n        \n        \n    \n    \n        \n    \n    \n        user147263\n        \n            \n        \n    \n\n                \n\n                \n                    \n    \n        \n            asked Nov 30, 2015 at 15:53\n        \n        \n    \n    \n        \n    \n    \n        JSCB\n        \n            13.9k1515 gold badges6969 silver badges128128 bronze badges\n        \n    \n\n\n\n                \n        \n    \n    $\\endgroup$\n\n\n\n\n\n            \n\n7\n\t\n        \n            \n\n                    \n    \n        \n            \n                    1\n            \n        \n        \n            \n                $\\begingroup$\n                It is a complete normed space, so I guess that it is trivially a manifold.\n                $\\endgroup$\n                \n                    Siminore\n– \n                        Siminore\n                \n                2015-11-30 15:55:41 +00:00\n                \n                    Commented\n                    Nov 30, 2015 at 15:55\n                \n            \n        \n    \n        \n            \n            \n    \n    \n\n\n        \n    \n        \n            \n                    2\n            \n        \n        \n            \n                $\\begingroup$\n                What definition do you take for a manifold?\n                $\\endgroup$\n                \n                    mathcounterexamples.net\n– \n                        mathcounterexamples.net\n                \n                2015-11-30 15:56:33 +00:00\n                \n                    Commented\n                    Nov 30, 2015 at 15:56\n                \n            \n        \n    \n    \n        \n            \n                    3\n            \n        \n        \n            \n                $\\begingroup$\n                manifold over what space? Points have no neighborhoods that are finite-dimensional. You could think of if as a manifold, but not over $\\mathbb R^n$ for any finite $n$.\n                $\\endgroup$\n                \n                    Mirko\n– \n                        Mirko\n                \n                2015-11-30 16:06:31 +00:00\n                \n                    Commented\n                    Nov 30, 2015 at 16:06\n                \n            \n        \n    \n    \n        \n            \n                    1\n            \n        \n        \n            \n                $\\begingroup$\n                As pointed out by @Siminore, it's a Banach manifold (modeled over the Banach space $C[0,1]$). You can do differential geometry also in the infinite dimensional case, though you have to be careful with some statements which are considered trivial in finite dimensions (like the statement that every linear functional is continous or that every finite dimenstional vector space is isomorphic to it's dual).\n                $\\endgroup$\n                \n                    Thomas\n– \n                        Thomas\n                \n                2015-11-30 16:32:52 +00:00\n                \n                    Commented\n                    Nov 30, 2015 at 16:32\n                \n                        \n                            \n            \n        \n    \n    \n        \n            \n            \n        \n        \n            \n                $\\begingroup$\n                @Thomas Sure. However I imagine that you take for atlas the one having a single chart equal to $(C[0,1],Id)$ which doesn't provide a manifold having much different properties than $C[0,1]$ itself!\n                $\\endgroup$\n                \n                    mathcounterexamples.net\n– \n                        mathcounterexamples.net\n                \n                2015-11-30 16:38:14 +00:00\n                \n                    Commented\n                    Nov 30, 2015 at 16:38\n                \n            \n        \n    \n\n            \n\t    \n\n        \n                    \n                        \n                    \n                 | \n            \n                Show 2 more comments\n            \n                 \n    \n\n    \n\n\n\n\n\n\n\n                \n                        \n                        \n                            \n                                \n                                    \n1 Answer                                        1\n                                    \n                                \n                                \n                                        \n\n\n    \n        \n            Sorted by:\n        \n        \n            Reset to default\n        \n    \n    \n        \n                    \n                        Highest score (default)\n                    \n                    \n                        Date modified (newest first)\n                    \n                    \n                        Date created (oldest first)\n                    \n        \n    \n\n\n\n                                \n                            \n\n\n                        \n                                        \n\n\n        \n                \n                    \n\n        \n            \n        \n        \n2        \n        \n\n            \n        \n\n\n        \n\n    \n\n\n\n\n\n\n\n            \n                \n                    \n            \n\n    \n    \n\n\n\n                \n\n            \n\n\n    $\\begingroup$\n\n\n    \nAn infinite-dimensional normed space $X$, such as $C[0,1]$ is not a topological manifold over any $\\mathbb{R}^n$, because there is no homeomorphism between an open subset $U\\subset X$ and an open subset  $V\\subset \\mathbb{R}^n$. To see why, take a compact subset of $V$ with nonempty interior; its image in $U$ would have to be also be a compact set with nonempty interior. But there are no such sets in $X$, because closed balls are not compact. The latter follows from Riesz' lemma. \n\nFor completeness, I also quote a comment by Thomas: \n\n\n  it's a Banach manifold (modeled over the Banach space $C[0,1]$). You can do differential geometry also in the infinite dimensional case, though you have to be careful with some statements which are considered trivial in finite dimensions (like the statement that every linear functional is continous or that every finite dimensional vector space is isomorphic to it's dual). -- Thomas\n"
+  },
+  "stackexchange_only_an_inline_formula": {
+    "page": "mathjax-stackexchange.html",
+    "quote": "$C[0,1]$"
+  },
+  "mathoverflow_paragraph_around_a_displayed_formula": {
+    "page": "mathjax-mathoverflow.html",
+    "quote": "Numerical calculation with gp (first to the default 38-digit\nprecision, then tripled) supports the conjecture that\n$$\\int_0^\\infty x \\, [J_0(x)]^5 \\, dx =\n\\frac{\\Gamma(1/15) \\, \\Gamma(2/15) \\, \\Gamma(4/15) \\, \\Gamma(8/15)}\n  {8\\sqrt{5} \\, \\pi^4}\n= \\frac{2}\n  {\\sqrt{5} \\, \\Gamma(7/15) \\, \\Gamma(11/15) \\, \\Gamma(13/15) \\, \\Gamma(14/15)}$$\n[the two Gamma expressions are easily proved equal via the\nidentity $\\Gamma(x) \\Gamma(1-x) = \\pi / \\sin(\\pi x)$;\nthe hard part is proving that either of them equals the definite integral]."
+  },
+  "mathoverflow_only_a_displayed_formula": {
+    "page": "mathjax-mathoverflow.html",
+    "quote": "$$\\int_0^\\infty x \\, [J_0(x)]^5 \\, dx =\n\\frac{\\Gamma(1/15) \\, \\Gamma(2/15) \\, \\Gamma(4/15) \\, \\Gamma(8/15)}\n  {8\\sqrt{5} \\, \\pi^4}\n= \\frac{2}\n  {\\sqrt{5} \\, \\Gamma(7/15) \\, \\Gamma(11/15) \\, \\Gamma(13/15) \\, \\Gamma(14/15)}$$"
+  },
+  "mathoverflow_only_an_inline_formula": {
+    "page": "mathjax-mathoverflow.html",
+    "quote": "$$K(a,b; p) = \\sum_{x=1}^{p-1} \\exp(2\\pi i (ax+bx^{-1})/p)$$"
+  },
+  "katex_inline_math": {
+    "page": "katex-docusaurus.html",
+    "quote": "Let $f\\colon[a,b] \\to \\R$ be Riemann integrable. Let $F\\colon[a,b]\\to\\R$ be $F(x)=\n\\int_{a}^{x} f(t)\\,dt$. Then $F$ is continuous, and at all $x$ such that $f$ is continuous at $x$, $F$ is differentiable at $x$ with $F'(x)=f(x)$."
+  },
+  "katex_display_math": {
+    "page": "katex-docusaurus.html",
+    "quote": "$$I = \\int_0^{2\\pi} \\sin(x)\\,dx$$"
+  },
+  "katex_prose_only": {
+    "page": "katex-docusaurus.html",
+    "quote": "Mathematical equations can be rendered using KaTeX."
+  },
+  "plain_prose": {
+    "page": "plain-about.html",
+    "quote": "I am a postdoctoral researcher at the National Center for Theoretical Sciences (NCTS) in Taipei, Taiwan. I completed my PhD at the University of Georgia, where I worked with Valery Alexeev, and I work on compactifications of moduli spaces of complex algebraic surfaces."
+  }
+}

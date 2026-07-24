@@ -1,0 +1,176 @@
+name: Recovery guard
+
+# The math recovery is this fork's reason to exist, and two things about it are invisible
+# in an ordinary test run: whether the tests would notice if the code changed underneath
+# them, and whether the parts of it nobody exercises are growing. Both fail the run when
+# they regress, so the answer is a red mark on the repository rather than a number somebody
+# has to go and look up.
+#
+# Both jobs install what the recovery's real-boundary tests need -- node and the
+# extractor's dependencies -- because a suite that cannot run those measures something
+# other than this fork's code.
+
+on:
+  schedule:
+    # Nightly. The question these jobs answer changes whenever the recovery or its tests
+    # do, which is often enough that a week of silence is a week of not knowing.
+    - cron: '0 4 * * *'
+  workflow_dispatch:
+  push:
+    paths:
+      - 'h/services/normalization.py'
+      - 'h/services/pdf_math.py'
+      - 'h/scripts/html-normalize/**'
+      - 'tests/unit/h/services/**'
+      - 'bin/check_recovery_coverage.py'
+      - 'bin/report_mutants.py'
+      - '.github/workflows/recovery-guard.yml'
+
+env:
+  # What tox sets for its `tests` env. mutmut runs pytest itself, outside tox, so its
+  # runner needs them from here.
+  DATABASE_URL: postgresql://postgres@localhost:5432/h_tests
+  ELASTICSEARCH_URL: http://localhost:9200
+  ELASTICSEARCH_INDEX: hypothesis-tests
+  AUTHORITY: example.com
+  JWT_SIGNING_KEY: dev_jwt_signing_key
+  # Generous recovery timeout for CI: the extractor's real-HTTP tests fetch live pages and
+  # the PDF tests fetch and OCR, both slower on a shared runner than on a workstation.
+  H_MATH_NORMALIZE_TIMEOUT: '60'
+
+jobs:
+  Coverage:
+    # The repository's own coverage config demands 100%; the test command overrides it with
+    # `--cov-fail-under=0`. Everything except the recovery meets it, so this job holds the
+    # two recovery modules to what they measure today and fails if either slips.
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15.10-alpine
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      elasticsearch:
+        image: hypothesis/elasticsearch:elasticsearch7.10
+        ports:
+          - 9200:9200
+        env:
+          discovery.type: single-node
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install what the recovery's real boundaries need
+        run: |
+          # Not corepack: the root package.json declares yarn as its packageManager, so
+          # corepack refuses to run pnpm here. The extractor's own tree is a pnpm one.
+          npx --yes pnpm@10.14.0 install --dir h/scripts/html-normalize --frozen-lockfile
+      - run: python -m pip install 'tox<4'
+      - name: Create the database the suite runs against
+        run: psql -U postgres -h localhost -p 5432 -c 'CREATE DATABASE h_tests;'
+      - name: Measure the recovery's coverage
+        # pipefail, or a failing suite is invisible: without it the step reports tee's
+        # status and the floor check scores a partial measurement.
+        shell: bash
+        run: |
+          set -o pipefail
+          tox -e tests -- --cov --cov-report=term --cov-fail-under=0 \
+            --numprocesses logical --dist loadgroup tests/unit/ | tee coverage.txt
+      - name: Hold each recovery module to its floor
+        run: python bin/check_recovery_coverage.py coverage.txt
+      - uses: actions/upload-artifact@v4
+        # Kept for the same reason as the survey's: a number with no record behind it
+        # cannot be argued with later.
+        if: always()
+        with:
+          name: coverage-report
+          retention-days: 90
+          path: coverage.txt
+
+  Mutants:
+    # Does the suite notice when the recovery changes? mutmut makes one small change at a
+    # time to a copy of the project and reruns the tests that own it; anything that
+    # survives is a change to the recovery no test objects to.
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    services:
+      postgres:
+        image: postgres:15.10-alpine
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      elasticsearch:
+        image: hypothesis/elasticsearch:elasticsearch7.10
+        ports:
+          - 9200:9200
+        env:
+          discovery.type: single-node
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install what the recovery's real boundaries need
+        run: |
+          # Not corepack: the root package.json declares yarn as its packageManager, so
+          # corepack refuses to run pnpm here. The extractor's own tree is a pnpm one.
+          npx --yes pnpm@10.14.0 install --dir h/scripts/html-normalize --frozen-lockfile
+      - name: Build the test environment, and prove it green before mutating anything
+        # mutmut shells out to `python -m pytest`, so it has to live in the same
+        # environment as the tests -- run beside it, it finds none of their dependencies.
+        run: |
+          tox -e tests -- -q --no-cov \
+            tests/unit/h/services/normalization_test.py \
+            tests/unit/h/services/pdf_math_test.py \
+            tests/unit/h/services/recovery_paths_test.py
+          .tox/tests/bin/pip install mutmut
+      - name: Survey the recovery for changes no test objects to
+        # mutmut exits non-zero when mutants survive, which is a finding rather than a
+        # broken run, so this step does not decide the job. It is configured in
+        # pyproject.toml under [tool.mutmut]; it copies the project to mutants/ and runs
+        # there, so nothing here mutates the checkout.
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          .tox/tests/bin/mutmut run --max-children 4 2>&1 | tee mutation-run.log
+      - name: Collect what the survey found
+        if: always()
+        run: |
+          .tox/tests/bin/mutmut export-cicd-stats
+          cp mutants/mutmut-cicd-stats.json mutation-stats.json
+          .tox/tests/bin/mutmut results > mutants.txt
+      - name: Report what the survey found
+        if: always() && hashFiles('mutation-stats.json') != ''
+        run: python bin/report_mutants.py mutation-stats.json mutants.txt >> "$GITHUB_STEP_SUMMARY"
+      - name: Fail on survivors, on a survey that tested nothing, and on one that killed nothing
+        run: python bin/report_mutants.py mutation-stats.json mutants.txt --fail-on-survivors
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mutation-survey
+          retention-days: 90
+          include-hidden-files: true
+          path: |
+            mutation-stats.json
+            mutants.txt
+            mutation-run.log

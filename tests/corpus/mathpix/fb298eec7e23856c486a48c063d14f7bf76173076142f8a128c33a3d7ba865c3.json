@@ -1,0 +1,14 @@
+{
+  "auto_rotate_confidence": 1.1931758410617908e-14,
+  "auto_rotate_degrees": 0,
+  "confidence": 1,
+  "confidence_rate": 1,
+  "image_height": 59,
+  "image_width": 675,
+  "is_handwritten": false,
+  "is_printed": true,
+  "latex_styled": "\\text { the residue is some finite data attached here }",
+  "request_id": "0de80093-26fd-48c2-a158-ef179ad3420c",
+  "text": "the residue is some finite data attached here",
+  "version": "SuperNet-200"
+}

@@ -1,0 +1,14 @@
+{
+  "auto_rotate_confidence": 0,
+  "auto_rotate_degrees": 0,
+  "confidence": 0.9863930901747153,
+  "confidence_rate": 0.9997892478690263,
+  "image_height": 59,
+  "image_width": 836,
+  "is_handwritten": false,
+  "is_printed": true,
+  "latex_styled": "\\text { surfaces ( } Z, M \\text { ) with a } 2 \\text {-divisible polarization } M=L \\cdot 2",
+  "request_id": "ce238cd6-f228-4225-b20c-026b5f37f5a6",
+  "text": "surfaces ( $Z, M$ ) with a 2 -divisible polarization $M=L \\cdot 2$",
+  "version": "SuperNet-200"
+}

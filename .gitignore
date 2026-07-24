@@ -40,3 +40,10 @@ h/scripts/html-normalize/node_modules/
 
 # Celery beat runtime schedule (dbm shelf) -- regenerated, never source
 celerybeat-schedule
+
+# Images the Mathpix emulator had no recording for. Transient: bin/record_mathpix_fixtures.py
+# turns them into fixtures and removes them.
+tests/corpus/mathpix/unrecorded/
+
+# mutmut runs from a copy of the project; it is regenerated, never committed.
+mutants/

@@ -86,6 +86,18 @@ ignore = [
     "RUF002",
     "RUF003",
 ]
+"tests/functional/api/pdf_math_annotations_test.py" = [
+    # The selections are real drags over a mathematics paper, so the quotes they carry are
+    # real math symbols by design.
+    "RUF001",
+    "RUF003",
+]
+"tests/corpus/record_mathpix.py" = [
+    # A script, run by hand to refresh the recordings, not an importable test module.
+    "INP001",
+    # Its printed report of what each crop came back as is its whole interface.
+    "T201",
+]
 "tests/unit/h/services/pdf_math_test.py" = [
     # Exercises the math-symbol detector, so the fixtures are real math symbols by design.
     "RUF001",
@@ -145,3 +157,28 @@ module = [
   "h.migrations.*",
 ]
 ignore_errors = true
+
+[tool.mutmut]
+# The fork's own recovery code; the rest of h is upstream's and upstream's suite covers it.
+source_paths = ["h/services/normalization.py", "h/services/pdf_math.py"]
+# mutmut runs pytest itself, against the tests that own those modules.
+pytest_add_cli_args_test_selection = [
+    "tests/unit/h/services/normalization_test.py",
+    "tests/unit/h/services/pdf_math_test.py",
+    "tests/unit/h/services/recovery_paths_test.py",
+]
+pytest_add_cli_args = ["--no-cov"]
+# It runs from a copy of the project rather than mutating the tree in place, so anything
+# the tests reach for has to come along.
+also_copy = ["h", "conf", "bin"]
+# Diagnostic message text is not mutated, because no admissible test could object to the
+# change. A test that asserts on the wording of an error is a banned shape (the message
+# is not the contract; the structured failure is), so mutating `msg = "..."` can only
+# ever produce a survivor that must not be killed -- or, worse, invite a test that pins
+# the wording to make the survivor go away. The failure *types* these messages travel
+# with are mutated as usual, and those are what the tests assert on.
+# `check=False` is likewise excluded, and for the same reason from the other direction:
+# it is subprocess.run's own default, so mutating it changes nothing that any test could
+# observe -- but ruff (PLW1510) requires it to be written explicitly. Code shape is
+# global QC's to decide; a mutant on a line QC mandates is not a proof burden.
+do_not_mutate_patterns = ["^\\s*msg = ", "^\\s*check=False,$"]

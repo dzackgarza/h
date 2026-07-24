@@ -5,17 +5,22 @@ quote is turned into a quote with the rendered math recovered and stored in
 ``annotation_normalized``; every view then reads that stored field (the API joins it), and
 the raw capture is used only for anchoring. The annotation row is never touched.
 
-Recovery is source-first, OCR-fallback, and fail-hard. An HTML page that exposes the math
-source (arXiv LaTeXML, Pandoc ``<span class="math">``) yields the exact authored TeX via the
-bundled Node/KaTeX extractor (``method='html'``); otherwise, and for every PDF region, the
-rendered region is OCR'd with Mathpix (``method='ocr'``). ``method`` is never ``raw``: a
-genuine failure (both source and OCR fail or come back empty) raises ``MathRecoveryError``,
-which rolls the create back so no annotation -- and no raw quote -- is ever persisted.
+Recovery is routed by document kind. An HTML page carries its mathematics in the source --
+arXiv LaTeXML, Pandoc ``<span class="math">``, KaTeX markup, or the delimited TeX a MathJax
+page (Stack Exchange, MathOverflow) writes straight into its text -- so the bundled Node
+extractor recovers the exact authored TeX (``method='html'``). When the extractor cannot
+locate the selection, the client's own captured ``textContent`` is the quote and is stored
+verbatim (``method='identity'``); an HTML selection is never OCR'd, because the client
+already sent the text and OCR of a render adds nothing. A PDF region carries no text layer,
+so it -- and only it -- is OCR'd with Mathpix (``method='ocr'``).
+
+``method`` is never ``raw``: a genuine failure (a page fetch/parse error, or an
+unrecoverable PDF region) raises ``MathRecoveryError``, which rolls the create back so no
+annotation -- and no raw quote -- is ever persisted.
 """
 
 from __future__ import annotations
 
-import base64
 import logging
 import shutil
 import subprocess
@@ -24,16 +29,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
-from sqlalchemy import or_, orm, select
+from sqlalchemy import func, or_, orm, select
 
 from h.models import Annotation, AnnotationNormalized
 from h.models.document import DocumentURI
 from h.services.pdf_math import (
     MathRecoveryError,
     clean_pdf_quote,
-    ocr_latex,
     recovery_timeout,
-    subprocess_timeout,
 )
 
 log = logging.getLogger(__name__)
@@ -41,15 +44,38 @@ log = logging.getLogger(__name__)
 _HTML_NORMALIZE = (
     Path(__file__).resolve().parents[1] / "scripts" / "html-normalize" / "index.mjs"
 )
-_HTML_RENDER = (
-    Path(__file__).resolve().parents[1] / "scripts" / "html-normalize" / "ocr.mjs"
-)
 
 
 @dataclass(frozen=True)
 class ReconciliationResult:
     normalized: int
     failures: list[tuple[str, str]]
+
+
+@dataclass(frozen=True)
+class RecoveryPaths:
+    """How this deployment's stored annotations were recovered.
+
+    ``counts`` is the path distribution; ``needs_reconciliation`` is every annotation whose
+    stored recovery the current contract would no longer produce -- exactly what
+    ``reconcile_missing`` repairs, so the report cannot drift from the repair.
+    """
+
+    counts: dict[str, int]
+    needs_reconciliation: list[str]
+
+    @property
+    def ocr_share(self) -> float:
+        """The share of recoveries that took the paid third-party path.
+
+        Source recovery is free and OCR is a call per annotation, so this is the number
+        that moves when a page shape stops being recoverable from its own source -- the
+        symptom of that regression, before anyone reads any code.
+        """
+        total = sum(self.counts.values())
+        if not total:
+            return 0.0
+        return self.counts.get("ocr", 0) / total
 
 
 def _node_path() -> str:
@@ -91,18 +117,23 @@ def _quote_context(annotation: Annotation) -> tuple[str, str]:
     return ("", "")
 
 
-def _html_source_extract(uri: str, exact: str) -> str:
-    r"""Extract the selection's math from the page's own source via the Node (KaTeX) script.
+def _html_source_extract(
+    uri: str, exact: str, prefix: str = "", suffix: str = ""
+) -> str:
+    r"""Extract the selection's math from the page's own source via the Node script.
 
-    Returns the reconstructed quote (exact authored TeX in ``\(..\)`` / ``$$..$$``), or ``""``
+    Returns the reconstructed quote (exact authored TeX in ``$..$`` / ``$$..$$``), or ``""``
     when the page exposes no recoverable math source for the selection -- the signal for the
     caller to fall back to OCR. Raises ``MathRecoveryError`` on a hard failure (page fetch,
-    parse, a crashed script, or a timeout); KaTeX reproduces the page's MathJax rendering,
-    which pure Python cannot.
+    parse, a crashed script, or a timeout).
+
+    ``prefix`` and ``suffix`` are the context the client captured either side of the
+    selection. They are what locates a selection made over nothing but a formula, which
+    carries no prose of its own to match.
     """
     try:
         result = subprocess.run(  # noqa: S603 - fixed script path, args are data
-            [_node_path(), str(_HTML_NORMALIZE), uri, exact],
+            [_node_path(), str(_HTML_NORMALIZE), uri, exact, prefix, suffix],
             capture_output=True,
             text=True,
             timeout=recovery_timeout(),
@@ -116,38 +147,6 @@ def _html_source_extract(uri: str, exact: str) -> str:
         msg = f"html-normalize failed: {reason}"
         raise MathRecoveryError(msg)
     return result.stdout.strip()
-
-
-def _render_html_quote(uri: str, exact: str) -> bytes:
-    """Render the selected HTML range in headless Chromium and return its PNG."""
-    try:
-        result = subprocess.run(  # noqa: S603 - fixed script path, args are data
-            [
-                _node_path(),
-                str(_HTML_RENDER),
-                uri,
-                exact,
-                str(int(recovery_timeout() * 1000)),
-            ],
-            capture_output=True,
-            text=True,
-            # The script is given the recovery timeout as its own deadline (above); it
-            # gets that long plus the declared shutdown headroom before being killed.
-            timeout=subprocess_timeout(),
-            check=False,
-        )
-    except (OSError, subprocess.SubprocessError) as exc:
-        msg = f"HTML rendered-region capture failed: {exc}"
-        raise MathRecoveryError(msg) from exc
-    if result.returncode != 0:
-        reason = result.stderr.strip()[:500] or f"exit {result.returncode}"
-        msg = f"HTML rendered-region capture failed: {reason}"
-        raise MathRecoveryError(msg)
-    try:
-        return base64.b64decode(result.stdout, validate=True)
-    except ValueError as exc:
-        msg = "HTML rendered-region capture returned invalid PNG data"
-        raise MathRecoveryError(msg) from exc
 
 
 class NormalizationService:
@@ -221,6 +220,25 @@ class NormalizationService:
                     normalized += 1
         return ReconciliationResult(normalized=normalized, failures=failures)
 
+    def recovery_paths(self) -> RecoveryPaths:
+        """Report how stored annotations were recovered, and which need repairing."""
+        rows = self._session.execute(
+            select(
+                AnnotationNormalized.method, func.count(AnnotationNormalized.id)
+            ).group_by(AnnotationNormalized.method)
+        ).all()
+        counts: dict[str, int] = {str(method): int(count) for method, count in rows}
+        # The repair path streams its candidates because it can walk the whole table and
+        # mutate as it goes. A report only reads, and holding a streamed cursor open over
+        # that scan deadlocks against concurrent writers, so it takes the same rows in one
+        # go -- through the same statement and the same skip, so the two cannot drift.
+        needing = [
+            annotation.id
+            for annotation in self._session.scalars(self._reconciliation_statement())
+            if not self._is_valid_identity(annotation)
+        ]
+        return RecoveryPaths(counts=counts, needs_reconciliation=needing)
+
     def _reconcile(self, annotation: Annotation) -> AnnotationNormalized | None:
         if annotation.normalized is None:
             return self.normalize(annotation)
@@ -233,10 +251,21 @@ class NormalizationService:
         annotation.normalized.method = method
         return annotation.normalized
 
-    def _reconciliation_candidates(self, limit: int | None):
-        statement = (
+    @staticmethod
+    def _reconciliation_statement():
+        """Annotations whose stored recovery this version would not produce.
+
+        Either no normalized row at all, or one carrying a method the current recovery
+        never writes. `identity` is listed because it is invalid for a PDF, which
+        `_is_valid_identity` then decides per row -- it cannot be expressed here.
+        """
+        return (
             select(Annotation)
             .outerjoin(AnnotationNormalized)
+            # The caller reads `annotation.normalized` for every row it gets back; without
+            # this that is one query per row, which on a whole-table walk is both slow and
+            # a long window for a concurrent writer to collide with.
+            .options(orm.contains_eager(Annotation.normalized))
             .where(
                 or_(
                     AnnotationNormalized.id.is_(None),
@@ -245,6 +274,23 @@ class NormalizationService:
             )
             .order_by(Annotation.created)
         )
+
+    @staticmethod
+    def _is_valid_identity(annotation: Annotation) -> bool:
+        """Whether this row's `identity` is the recovery the current version would produce.
+
+        `identity` is what an HTML selection with no mathematics recovers to, and is
+        invalid for a PDF region, which always goes through OCR.
+        """
+        normalized = annotation.normalized
+        return (
+            normalized is not None
+            and normalized.method == "identity"
+            and _page_index(annotation) is None
+        )
+
+    def _reconciliation_candidates(self, limit: int | None):
+        statement = self._reconciliation_statement()
         count = 0
         # Stream in batches: the candidate set (every annotation without a valid row) can
         # exceed memory if fetched eagerly, and a SQL LIMIT cannot be used because the
@@ -252,12 +298,7 @@ class NormalizationService:
         for annotation in self._session.scalars(
             statement.execution_options(yield_per=100)
         ):
-            normalized = annotation.normalized
-            if (
-                normalized is not None
-                and normalized.method == "identity"
-                and _page_index(annotation) is None
-            ):
+            if self._is_valid_identity(annotation):
                 continue
             yield annotation
             count += 1
@@ -281,7 +322,8 @@ class NormalizationService:
         page = _page_index(annotation)
         if page is not None:  # PDF annotation
             return (self._recover_pdf(annotation, uri, page, quote), "ocr")
-        return self._recover_html(uri, quote)
+        prefix, suffix = _quote_context(annotation)
+        return self._recover_html(uri, quote, prefix, suffix)
 
     def _recover_pdf(
         self, annotation: Annotation, uri: str, page: int, quote: str
@@ -294,27 +336,32 @@ class NormalizationService:
         prefix, suffix = _quote_context(annotation)
         return clean_pdf_quote(url, page, quote, prefix=prefix, suffix=suffix)
 
-    def _recover_html(self, uri: str, quote: str) -> tuple[str, str]:
-        """Reconstruct HTML math from the page source; fall back to OCR of the region."""
+    def _recover_html(
+        self, uri: str, quote: str, prefix: str = "", suffix: str = ""
+    ) -> tuple[str, str]:
+        """Reconstruct HTML math from the page source, or keep the captured text as-is.
+
+        HTML mathematics lives in the page source -- MathJax delimiters, KaTeX/MathML
+        markup, LaTeXML ``alttext`` -- so the extractor recovers the authored TeX when it
+        can locate the selection. When it cannot (a client-rendered page whose fetched
+        source differs from what the reader saw, a selection outside ``<main>``, or a
+        whitespace mismatch), the client already sent the exact ``textContent`` the reader
+        dragged over: that captured text *is* the quote, so it is stored verbatim
+        (``identity``). A source-less HTML selection is never OCR'd -- the client's own
+        capture is the ground truth, and OCR of a raster render is only how a PDF region,
+        which carries no text layer, is recovered.
+        """
         if not uri:
-            # Guard before spawning subprocesses: with no page URI there is nothing to
-            # fetch, so failing here beats two doomed extractor/OCR launches.
+            # Guard before spawning the extractor: with no page URI there is nothing to
+            # fetch, so failing here beats a doomed extractor launch.
             msg = "annotation has no target URI to recover HTML math from"
             raise MathRecoveryError(msg)
-        source = _html_source_extract(uri, quote)
+        source = _html_source_extract(uri, quote, prefix, suffix)
         if source:
             if source == quote:
                 return (quote, "identity")
             return (source, "html")
-        return (self._ocr_html_region(uri, quote), "ocr")
-
-    def _ocr_html_region(self, uri: str, quote: str) -> str:
-        """OCR a source-less HTML selection from a backend Chromium rendering."""
-        recovered = ocr_latex(_render_html_quote(uri, quote))
-        if not recovered:
-            msg = "OCR returned empty output for the rendered HTML selection"
-            raise MathRecoveryError(msg)
-        return recovered
+        return (quote, "identity")
 
     def _resolve_pdf_url(self, uri: str) -> str | None:
         """Resolve a PDF annotation's document to a fetchable http(s) URL, or ``None``.
