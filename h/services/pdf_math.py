@@ -106,29 +106,6 @@ def mathpix_endpoint() -> str:
     return url
 
 
-def shutdown_grace() -> float:
-    """Seconds a recovery subprocess gets *beyond* its own deadline before being killed.
-
-    The Node wrappers are handed ``recovery_timeout()`` as the deadline for the work they
-    supervise (a page load, a render). This is the headroom on top of it: without any, the
-    wrapper is killed at the same instant its own work times out, so a browser that is
-    merely slow to start -- cold cache, loaded hardware -- is reported as a recovery
-    timeout. It is configurable precisely so an operator hitting spurious timeouts can
-    raise it without inflating the recovery timeout, which is a different knob with
-    different consequences.
-    """
-    return _seconds_setting("H_MATH_NORMALIZE_SHUTDOWN_GRACE")
-
-
-def subprocess_timeout() -> float:
-    """Wall-clock limit for a recovery subprocess: its work's deadline plus the headroom.
-
-    The single place the two settings are combined, so no call site recomputes the
-    relationship.
-    """
-    return recovery_timeout() + shutdown_grace()
-
-
 def _norm(text: str) -> str:
     """Reduce a word to its lowercase alphanumeric core, for word-matching.
 

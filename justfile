@@ -377,7 +377,3 @@ _inspect-missing-normalization:
 [private]
 _add-html-normalize-browser:
     cd h/scripts/html-normalize && pnpm add playwright-core
-
-[private]
-_render-html-ocr-fixture output:
-    node h/scripts/html-normalize/ocr.mjs 'http://127.0.0.1:7654/framework/Higher-Categories-and-Universes.html' 'Ordinary categories enter through the ordinary nerve' 30000 | base64 -d > {{output}}

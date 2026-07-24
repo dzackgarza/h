@@ -6,8 +6,8 @@ name: Recovery guard
 # they regress, so the answer is a red mark on the repository rather than a number somebody
 # has to go and look up.
 #
-# Both jobs install what the recovery's real-boundary tests need -- node, the extractor's
-# dependencies, and a Chromium -- because a suite that cannot run those measures something
+# Both jobs install what the recovery's real-boundary tests need -- node and the
+# extractor's dependencies -- because a suite that cannot run those measures something
 # other than this fork's code.
 
 on:
@@ -34,12 +34,9 @@ env:
   ELASTICSEARCH_INDEX: hypothesis-tests
   AUTHORITY: example.com
   JWT_SIGNING_KEY: dev_jwt_signing_key
-  # A cold-starting Chromium on a shared runner is slower than on a workstation, and the
-  # shutdown grace exists for exactly that case -- the module's own comment says so. The
-  # workstation defaults (30/5) time the browser out at 35s and report it as a recovery
-  # failure, which is what stopped the first instrumented survey.
+  # Generous recovery timeout for CI: the extractor's real-HTTP tests fetch live pages and
+  # the PDF tests fetch and OCR, both slower on a shared runner than on a workstation.
   H_MATH_NORMALIZE_TIMEOUT: '60'
-  H_MATH_NORMALIZE_SHUTDOWN_GRACE: '30'
 
 jobs:
   Coverage:
@@ -78,8 +75,6 @@ jobs:
           # Not corepack: the root package.json declares yarn as its packageManager, so
           # corepack refuses to run pnpm here. The extractor's own tree is a pnpm one.
           npx --yes pnpm@10.14.0 install --dir h/scripts/html-normalize --frozen-lockfile
-          PLAYWRIGHT_BROWSERS_PATH="$PWD/.playwright" npx --yes playwright@1.61.1 install chromium
-          echo "H_CHROMIUM_PATH=$(find "$PWD/.playwright" -name chrome -type f | head -1)" >> "$GITHUB_ENV"
       - run: python -m pip install 'tox<4'
       - name: Create the database the suite runs against
         run: psql -U postgres -h localhost -p 5432 -c 'CREATE DATABASE h_tests;'
@@ -139,8 +134,6 @@ jobs:
           # Not corepack: the root package.json declares yarn as its packageManager, so
           # corepack refuses to run pnpm here. The extractor's own tree is a pnpm one.
           npx --yes pnpm@10.14.0 install --dir h/scripts/html-normalize --frozen-lockfile
-          PLAYWRIGHT_BROWSERS_PATH="$PWD/.playwright" npx --yes playwright@1.61.1 install chromium
-          echo "H_CHROMIUM_PATH=$(find "$PWD/.playwright" -name chrome -type f | head -1)" >> "$GITHUB_ENV"
       - name: Build the test environment, and prove it green before mutating anything
         # mutmut shells out to `python -m pytest`, so it has to live in the same
         # environment as the tests -- run beside it, it finds none of their dependencies.

@@ -5,20 +5,22 @@ quote is turned into a quote with the rendered math recovered and stored in
 ``annotation_normalized``; every view then reads that stored field (the API joins it), and
 the raw capture is used only for anchoring. The annotation row is never touched.
 
-Recovery is source-first, OCR-fallback, and fail-hard. An HTML page that exposes the math
-source -- arXiv LaTeXML, Pandoc ``<span class="math">``, KaTeX markup, or the delimited TeX
-a MathJax page (Stack Exchange, MathOverflow) writes straight into its text -- yields the
-exact authored TeX via the bundled Node extractor (``method='html'``); otherwise, and for
-every PDF region, the rendered region is OCR'd with Mathpix (``method='ocr'``). Source
-recovery is what keeps a paid OCR call off the pages a reader actually spends their day on.
-``method`` is never ``raw``: a
-genuine failure (both source and OCR fail or come back empty) raises ``MathRecoveryError``,
-which rolls the create back so no annotation -- and no raw quote -- is ever persisted.
+Recovery is routed by document kind. An HTML page carries its mathematics in the source --
+arXiv LaTeXML, Pandoc ``<span class="math">``, KaTeX markup, or the delimited TeX a MathJax
+page (Stack Exchange, MathOverflow) writes straight into its text -- so the bundled Node
+extractor recovers the exact authored TeX (``method='html'``). When the extractor cannot
+locate the selection, the client's own captured ``textContent`` is the quote and is stored
+verbatim (``method='identity'``); an HTML selection is never OCR'd, because the client
+already sent the text and OCR of a render adds nothing. A PDF region carries no text layer,
+so it -- and only it -- is OCR'd with Mathpix (``method='ocr'``).
+
+``method`` is never ``raw``: a genuine failure (a page fetch/parse error, or an
+unrecoverable PDF region) raises ``MathRecoveryError``, which rolls the create back so no
+annotation -- and no raw quote -- is ever persisted.
 """
 
 from __future__ import annotations
 
-import base64
 import logging
 import shutil
 import subprocess
@@ -34,18 +36,13 @@ from h.models.document import DocumentURI
 from h.services.pdf_math import (
     MathRecoveryError,
     clean_pdf_quote,
-    ocr_latex,
     recovery_timeout,
-    subprocess_timeout,
 )
 
 log = logging.getLogger(__name__)
 
 _HTML_NORMALIZE = (
     Path(__file__).resolve().parents[1] / "scripts" / "html-normalize" / "index.mjs"
-)
-_HTML_RENDER = (
-    Path(__file__).resolve().parents[1] / "scripts" / "html-normalize" / "ocr.mjs"
 )
 
 
@@ -150,38 +147,6 @@ def _html_source_extract(
         msg = f"html-normalize failed: {reason}"
         raise MathRecoveryError(msg)
     return result.stdout.strip()
-
-
-def _render_html_quote(uri: str, exact: str) -> bytes:
-    """Render the selected HTML range in headless Chromium and return its PNG."""
-    try:
-        result = subprocess.run(  # noqa: S603 - fixed script path, args are data
-            [
-                _node_path(),
-                str(_HTML_RENDER),
-                uri,
-                exact,
-                str(int(recovery_timeout() * 1000)),
-            ],
-            capture_output=True,
-            text=True,
-            # The script is given the recovery timeout as its own deadline (above); it
-            # gets that long plus the declared shutdown headroom before being killed.
-            timeout=subprocess_timeout(),
-            check=False,
-        )
-    except (OSError, subprocess.SubprocessError) as exc:
-        msg = f"HTML rendered-region capture failed: {exc}"
-        raise MathRecoveryError(msg) from exc
-    if result.returncode != 0:
-        reason = result.stderr.strip()[:500] or f"exit {result.returncode}"
-        msg = f"HTML rendered-region capture failed: {reason}"
-        raise MathRecoveryError(msg)
-    try:
-        return base64.b64decode(result.stdout, validate=True)
-    except ValueError as exc:
-        msg = "HTML rendered-region capture returned invalid PNG data"
-        raise MathRecoveryError(msg) from exc
 
 
 class NormalizationService:
@@ -374,10 +339,21 @@ class NormalizationService:
     def _recover_html(
         self, uri: str, quote: str, prefix: str = "", suffix: str = ""
     ) -> tuple[str, str]:
-        """Reconstruct HTML math from the page source; fall back to OCR of the region."""
+        """Reconstruct HTML math from the page source, or keep the captured text as-is.
+
+        HTML mathematics lives in the page source -- MathJax delimiters, KaTeX/MathML
+        markup, LaTeXML ``alttext`` -- so the extractor recovers the authored TeX when it
+        can locate the selection. When it cannot (a client-rendered page whose fetched
+        source differs from what the reader saw, a selection outside ``<main>``, or a
+        whitespace mismatch), the client already sent the exact ``textContent`` the reader
+        dragged over: that captured text *is* the quote, so it is stored verbatim
+        (``identity``). A source-less HTML selection is never OCR'd -- the client's own
+        capture is the ground truth, and OCR of a raster render is only how a PDF region,
+        which carries no text layer, is recovered.
+        """
         if not uri:
-            # Guard before spawning subprocesses: with no page URI there is nothing to
-            # fetch, so failing here beats two doomed extractor/OCR launches.
+            # Guard before spawning the extractor: with no page URI there is nothing to
+            # fetch, so failing here beats a doomed extractor launch.
             msg = "annotation has no target URI to recover HTML math from"
             raise MathRecoveryError(msg)
         source = _html_source_extract(uri, quote, prefix, suffix)
@@ -385,15 +361,7 @@ class NormalizationService:
             if source == quote:
                 return (quote, "identity")
             return (source, "html")
-        return (self._ocr_html_region(uri, quote), "ocr")
-
-    def _ocr_html_region(self, uri: str, quote: str) -> str:
-        """OCR a source-less HTML selection from a backend Chromium rendering."""
-        recovered = ocr_latex(_render_html_quote(uri, quote))
-        if not recovered:
-            msg = "OCR returned empty output for the rendered HTML selection"
-            raise MathRecoveryError(msg)
-        return recovered
+        return (quote, "identity")
 
     def _resolve_pdf_url(self, uri: str) -> str | None:
         """Resolve a PDF annotation's document to a fetchable http(s) URL, or ``None``.

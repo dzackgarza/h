@@ -1,10 +1,6 @@
 import http.server
-import os
-import shutil
 import threading
-import time
 from datetime import UTC, datetime
-from pathlib import Path
 from unittest import mock
 from unittest.mock import sentinel
 from urllib.parse import quote
@@ -15,7 +11,6 @@ from h.models import AnnotationNormalized
 from h.services.normalization import (
     NormalizationService,
     _html_source_extract,
-    _render_html_quote,
     factory,
 )
 from h.services.pdf_math import MathRecoveryError
@@ -149,29 +144,21 @@ class TestNormalize:
         assert row.method == "html"
         assert row in db_session
 
-    def test_source_less_html_falls_back_to_rendered_region_ocr(
-        self,
-        svc,
-        html_source_extract,
-        render_html_quote,
-        ocr_latex,
-        factories,
-        db_session,
+    def test_source_less_html_stores_the_captured_text_as_identity(
+        self, svc, html_source_extract, factories, db_session
     ):
+        # The extractor could not locate the selection (a client-rendered page, a
+        # selection outside <main>, a whitespace mismatch). The client already sent the
+        # exact text the reader dragged over, so it is stored verbatim rather than OCR'd.
         html_source_extract.return_value = ""
-        render_html_quote.return_value = b"rendered selection PNG"
-        ocr_latex.return_value = r"the space $\mathcal{M}$ here"
-        annotation = self.annotation(factories, "the space M here", "https://ex.com/p")
+        exact = "plain prose the extractor could not locate"
+        annotation = self.annotation(factories, exact, "https://ex.com/p")
 
         row = svc.normalize(annotation)
         db_session.flush()
 
-        render_html_quote.assert_called_once_with(
-            "https://ex.com/p", "the space M here"
-        )
-        ocr_latex.assert_called_once_with(b"rendered selection PNG")
-        assert row.normalized_quote == r"the space $\mathcal{M}$ here"
-        assert row.method == "ocr"
+        assert row.normalized_quote == exact
+        assert row.method == "identity"
 
     def test_html_subprocess_failure_propagates_and_adds_no_row(
         self, svc, html_source_extract, factories, db_session
@@ -320,14 +307,6 @@ class TestNormalize:
     def clean_pdf_quote(self, patch):
         return patch("h.services.normalization.clean_pdf_quote")
 
-    @pytest.fixture
-    def render_html_quote(self, patch):
-        return patch("h.services.normalization._render_html_quote")
-
-    @pytest.fixture
-    def ocr_latex(self, patch):
-        return patch("h.services.normalization.ocr_latex")
-
 
 class TestHtmlSourceExtractRealBoundary:
     """Exercise the actual Node extractor subprocess -- no wrapper is patched.
@@ -459,158 +438,3 @@ class TestFactory:
 
         assert isinstance(svc, NormalizationService)
         assert svc._session == request.db  # noqa: SLF001
-
-
-class TestRenderHtmlQuoteRealBoundary:
-    """Exercise the real ocr.mjs subprocess: Playwright-driven Chromium screenshots.
-
-    Requires ``H_CHROMIUM_PATH`` (the deployment contract); the rendered-region capture
-    is the recovery path for source-less HTML math, so its subprocess boundary gets the
-    same non-mock coverage as the extractor's.
-    """
-
-    @pytest.mark.usefixtures("chromium")
-    def test_captures_a_png_of_the_selection_region(self, page_url):
-        png = _render_html_quote(page_url, "a selection to capture")
-
-        assert png[:8] == b"\x89PNG\r\n\x1a\n"
-        assert len(png) > 100  # a real image, not a stub
-
-    @pytest.mark.usefixtures("chromium")
-    def test_a_selection_not_on_the_page_is_a_hard_failure(self, page_url):
-        with pytest.raises(MathRecoveryError, match="could not be located"):
-            _render_html_quote(page_url, "text that is not on the page")
-
-    def test_a_missing_chromium_path_is_a_hard_failure(self, page_url, monkeypatch):
-        monkeypatch.delenv("H_CHROMIUM_PATH", raising=False)
-        with pytest.raises(MathRecoveryError, match="H_CHROMIUM_PATH"):
-            _render_html_quote(page_url, "a selection to capture")
-
-    @pytest.fixture
-    def chromium(self, monkeypatch):
-        path = os.environ.get("H_CHROMIUM_PATH") or shutil.which("chromium")
-        if not path:
-            msg = "no Chromium available for the ocr.mjs real-boundary test"
-            raise RuntimeError(msg)
-        monkeypatch.setenv("H_CHROMIUM_PATH", path)
-        return path
-
-    @pytest.fixture
-    def page_url(self):
-        page = (
-            b"<html><body><main><p>some prose and then "
-            b"a selection to capture inside the paragraph.</p></main></body></html>"
-        )
-
-        class Handler(http.server.BaseHTTPRequestHandler):
-            def do_GET(self):
-                self.send_response(200)
-                self.send_header("Content-Type", "text/html")
-                self.end_headers()
-                self.wfile.write(page)
-
-            def log_message(self, *_args):
-                """Keep test output quiet; assertions cover the behavior."""
-
-        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
-        thread.start()
-        yield f"http://127.0.0.1:{server.server_address[1]}/page.html"
-        server.shutdown()
-        thread.join()
-        server.server_close()
-
-
-class TestRenderHtmlQuoteSubprocessContract:
-    """What the recovery hands the render script, and what it accepts back from it.
-
-    The real-boundary tests above prove a Chromium render happens and that a locating
-    miss fails. Neither can see the deadline the script is given, because a render that
-    succeeds succeeds under any deadline long enough -- and the recovery's own setting is
-    in seconds while the script's argument is in milliseconds. That conversion is this
-    repository's, and getting it wrong hands every real page a 30ms budget.
-
-    So this drives a stand-in ``node`` on PATH, which is where `_node_path` looks:
-    `_render_html_quote` runs whole and spawns a real process, and what it sent is read
-    off the argv that process received.
-    """
-
-    def test_the_scripts_deadline_is_the_recovery_timeout_in_milliseconds(
-        self, stand_in_node, monkeypatch
-    ):
-        # The script takes milliseconds. Handing it seconds gives a page load a 30ms
-        # budget and reports the timeout as a recovery failure on every real page.
-        monkeypatch.setenv("H_MATH_NORMALIZE_TIMEOUT", "2")
-        argv = stand_in_node(
-            'printf "%s\\n" "$@" > "$ARGV_FILE"; printf "iVBORw0KGgo="'
-        )
-
-        _render_html_quote("https://ex.com/page", "a selection")
-
-        sent = argv.read_text().split("\n")
-        assert sent[1] == "https://ex.com/page"
-        assert sent[2] == "a selection"
-        assert sent[3] == "2000"
-
-    @pytest.fixture
-    def stand_in_node(self, tmp_path, monkeypatch):
-        """Put a scripted ``node`` first on PATH, where `_node_path` resolves it."""
-
-        def install(body: str, shebang: str = "/bin/sh") -> Path:
-            argv_file = tmp_path / "argv.txt"
-            node = tmp_path / "node"
-            node.write_text(f"#!{shebang}\nARGV_FILE={argv_file}\n{body}\n")
-            node.chmod(0o755)
-            monkeypatch.setenv("PATH", f"{tmp_path}{os.pathsep}{os.environ['PATH']}")
-            return argv_file
-
-        return install
-
-
-class TestSubprocessShutdownGrace:
-    """The wrapper's shutdown headroom is configuration, and it is what bounds the call.
-
-    ``ocr.mjs`` is handed the recovery timeout as its own deadline, so the Python side
-    must allow it that long *plus* declared headroom -- otherwise a wrapper that is
-    winding down is killed at the same instant as the work it supervises, and a slow or
-    cold-starting browser is reported as a recovery timeout. The headroom is therefore a
-    behavioral parameter an operator has to be able to set without inflating the
-    unrelated recovery timeout.
-    """
-
-    @pytest.mark.parametrize(
-        ("grace", "at_least", "at_most"),
-        [("1", 1.5, 3.0), ("3", 3.5, 5.0)],
-    )
-    def test_the_configured_grace_is_what_bounds_the_render_subprocess(
-        self, unresponsive_chromium, monkeypatch, grace, at_least, at_most
-    ):
-        # The stand-in browser never finishes starting, so the Node wrapper runs until
-        # the Python side stops it: the elapsed time is the deadline that was actually
-        # applied. Both windows exclude a run bounded by the recovery timeout alone and
-        # a run bounded by a headroom baked into the call.
-        monkeypatch.setenv("H_MATH_NORMALIZE_TIMEOUT", "1")
-        monkeypatch.setenv("H_MATH_NORMALIZE_SHUTDOWN_GRACE", grace)
-        monkeypatch.setenv("H_CHROMIUM_PATH", unresponsive_chromium)
-
-        started = time.perf_counter()
-        with pytest.raises(MathRecoveryError):
-            _render_html_quote("http://127.0.0.1:1/nowhere.html", "a selection")
-        elapsed = time.perf_counter() - started
-
-        assert at_least < elapsed < at_most
-
-    def test_a_malformed_grace_fails_the_render_path_as_a_recovery_failure(
-        self, monkeypatch
-    ):
-        monkeypatch.setenv("H_MATH_NORMALIZE_SHUTDOWN_GRACE", "a moment")
-
-        with pytest.raises(MathRecoveryError) as failure:
-            _render_html_quote("http://127.0.0.1:1/nowhere.html", "a selection")
-
-        assert "H_MATH_NORMALIZE_SHUTDOWN_GRACE" in str(failure.value)
-        assert "a moment" in str(failure.value)
-
-    @pytest.fixture
-    def unresponsive_chromium(self):
-        return str(Path(__file__).with_name("unresponsive_chromium.sh"))
